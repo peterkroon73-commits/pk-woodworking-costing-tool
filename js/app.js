@@ -26,6 +26,104 @@
   const CUT_STOCK_LENGTH = 1800; // mm, standard paling length
   const CUT_KERF = 3;            // mm, saw-cut allowance between pieces on the same paling
 
+  const PKP001_ROWS = [
+    { name: 'A1', length: 500, qty: 8 },
+    { name: 'A2', length: 500, qty: 2 },
+    { name: 'B1 (long side)', length: 1000, qty: 8 },
+    { name: 'B2 (short side)', length: 465, qty: 8 },
+    { name: 'C1 (base rail, rip 50mm)', length: 1000, qty: 2 },
+    { name: 'C3 (base slat, measure-to-fit)', length: 435, qty: 9 },
+    { name: 'D1 (castor block)', length: 100, qty: 4 },
+    { name: 'D2 (castor support, measure-to-fit)', length: 435, qty: 2 },
+    { name: 'E1 (long top cap)', length: 1000, qty: 2 },
+    { name: 'E2 (side top cap)', length: 645, qty: 2 },
+  ];
+
+  const CUT_LIST_TEMPLATES = [
+    {
+      id: 'PKP-001',
+      name: 'Standard Raised Planter',
+      category: 'Planters',
+      rows: [...PKP001_ROWS],
+    },
+    {
+      id: 'PKP-002',
+      name: 'Trellis Raised Planter',
+      category: 'Planters',
+      rows: [
+        ...PKP001_ROWS,
+        { name: 'A3 (rear upright, laminated)', length: 1785, qty: 6 },
+        { name: 'F1 (horizontal rail)', length: 1000, qty: 5 },
+        { name: 'F2 (vertical slat, rip narrow)', length: 1100, qty: 8 },
+      ],
+    },
+    {
+      id: 'PKP-003',
+      name: 'Planter Bench',
+      category: 'Planters',
+      warning: 'Prototype only — confirm against physical prototype before use. Uses mixed 100mm paling + 70×35mm framing stock.',
+      rows: [
+        { name: 'A1-style leg', length: 650, qty: 16 },
+        { name: 'Wall panel', length: 420, qty: 24 },
+        { name: 'Wall panel', length: 470, qty: 24 },
+        { name: 'Seat slat', length: 500, qty: 8 },
+        { name: 'Top cap', length: 550, qty: 4 },
+      ],
+    },
+    {
+      id: 'PKP-004',
+      name: 'Offcut Mini Planter',
+      category: 'Planters',
+      warning: 'Rev B dimensions shown — confirm against your locked Rev C spec.',
+      rows: [
+        { name: 'A1', length: 500, qty: 8 },
+        { name: 'B1 (long side)', length: 360, qty: 8 },
+        { name: 'B2 (short side)', length: 350, qty: 8 },
+        { name: 'C1 (base rail, rip 50mm)', length: 300, qty: 2 },
+        { name: 'C3 (base slat, measure-to-fit)', length: 150, qty: 5 },
+        { name: 'E1 (long top cap)', length: 560, qty: 2 },
+        { name: 'E2 (short top cap)', length: 550, qty: 2 },
+      ],
+    },
+    {
+      id: 'PKP-005',
+      name: 'Corner Nursery Shelf Planter',
+      category: 'Planters',
+      rows: [
+        { name: 'A1 (front leg)', length: 500, qty: 4 },
+        { name: 'A3 (rear upright)', length: 1785, qty: 4 },
+        { name: 'B1 (front wall)', length: 615, qty: 2 },
+        { name: 'B2 (side wall)', length: 465, qty: 4 },
+        { name: 'C1 (base rail, rip 50mm)', length: 615, qty: 2 },
+        { name: 'C3 (base slat, measure-to-fit)', length: 465, qty: 5 },
+        { name: 'D1 (castor block)', length: 100, qty: 4 },
+        { name: 'D2 (castor support, measure-to-fit)', length: 465, qty: 2 },
+        { name: 'G1 (shelf board)', length: 615, qty: 5 },
+        { name: 'G2 (centre notched support, 120mm stock)', length: 1785, qty: 1 },
+        { name: 'E1 (box top cap front)', length: 700, qty: 1 },
+        { name: 'E2 (box top cap side)', length: 550, qty: 2 },
+        { name: 'G3 (tower top cap)', length: 700, qty: 1 },
+      ],
+    },
+    {
+      id: 'PKA-001',
+      name: 'Universal Pot Trough',
+      category: 'Accessories',
+      note: 'Accessory — quantities are per 2-box batch.',
+      rows: [
+        { name: 'B1 (front wall)', length: 400, qty: 2 },
+        { name: 'B2 (end wall)', length: 150, qty: 4 },
+        { name: 'B3 (back panel)', length: 400, qty: 2 },
+        { name: 'C3 (base slat, measure-to-fit)', length: 368, qty: 4 },
+        { name: 'J1/J2 (cleat, 45° rip)', length: 368, qty: 2 },
+      ],
+    },
+  ];
+
+  function findCutListTemplate(id) {
+    return CUT_LIST_TEMPLATES.find(t => t.id === id) || null;
+  }
+
   function uid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -123,6 +221,7 @@
       validDays: s.validDays,
       client: { name: '', contact: '', notes: '' },
       cutList: [],
+      cutListTemplateId: null,
       bom: s.materials.map(m => ({
         materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0,
       })),
@@ -253,6 +352,60 @@
     });
   }
 
+  function renderTemplateOptions() {
+    const select = el('cutListTemplate');
+    const categories = [];
+    CUT_LIST_TEMPLATES.forEach(t => {
+      if (!categories.includes(t.category)) categories.push(t.category);
+    });
+    let html = '<option value="">-- Select a product --</option>';
+    categories.forEach(category => {
+      html += `<optgroup label="${escapeAttr(category)}">`;
+      CUT_LIST_TEMPLATES.filter(t => t.category === category).forEach(t => {
+        const flag = t.warning ? ' ⚠️' : '';
+        html += `<option value="${escapeAttr(t.id)}">${escapeHtml(t.id)} — ${escapeHtml(t.name)}${flag}</option>`;
+      });
+      html += '</optgroup>';
+    });
+    select.innerHTML = html;
+  }
+
+  function renderTemplateNotice() {
+    const container = el('cutListTemplateNotice');
+    el('cutListTemplate').value = state.current.cutListTemplateId || '';
+    const template = state.current.cutListTemplateId ? findCutListTemplate(state.current.cutListTemplateId) : null;
+    if (template && template.warning) {
+      container.innerHTML = `<div class="template-notice warning">⚠ ${escapeHtml(template.warning)}</div>`;
+    } else if (template && template.note) {
+      container.innerHTML = `<div class="template-notice info">${escapeHtml(template.note)}</div>`;
+    } else {
+      container.innerHTML = '';
+    }
+  }
+
+  function loadCutListTemplate(templateId) {
+    const template = findCutListTemplate(templateId);
+    if (!template) return;
+
+    if (state.current.cutList.length > 0) {
+      const ok = confirm(`Replace the current cut list with ${template.id} — ${template.name}? This can't be undone.`);
+      if (!ok) {
+        renderTemplateNotice();
+        return;
+      }
+    }
+
+    state.current.cutList = template.rows.map(r => ({ id: uid(), name: r.name, length: r.length, qty: r.qty }));
+    state.current.cutListTemplateId = template.id;
+    renderCutListRows();
+    refreshCutList();
+    if (!state.priceOverridden) state.current.sellingPriceOverride = null;
+    renderBom();
+    renderSummary();
+    renderTemplateNotice();
+    saveDraft();
+  }
+
   function renderCutListRows() {
     const tbody = el('cutListBody');
     tbody.innerHTML = '';
@@ -318,6 +471,7 @@
     renderQuoteMeta();
     renderClient();
     renderCutListRows();
+    renderTemplateNotice();
     refreshCutList();
     renderBom();
     renderLabourOverhead();
@@ -415,6 +569,12 @@
       renderBom();
       renderSummary();
       saveDraft();
+    });
+
+    el('cutListTemplate').addEventListener('change', e => {
+      const value = e.target.value;
+      if (!value) { renderTemplateNotice(); return; }
+      loadCutListTemplate(value);
     });
 
     el('btnAddCutItem').addEventListener('click', () => {
@@ -764,6 +924,7 @@
     bindSavedEvents();
     bindSettingsEvents();
 
+    renderTemplateOptions();
     renderQuoteForm();
     renderSavedList();
     renderSettingsForm();

@@ -357,6 +357,24 @@ input[readonly] {
   font-weight: 600;
 }
 
+.template-notice {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.template-notice.warning {
+  background: #fbe9e4;
+  color: var(--danger);
+}
+
+.template-notice.info {
+  background: #eaf1ec;
+  color: var(--accent);
+}
+
 .qty-locked {
   display: flex;
   flex-direction: column;

@@ -224,6 +224,29 @@
 
   let lastCutListResult = { palingsRequired: 0, offcuts: [], totalOffcut: 0, warnings: [] };
 
+  // Working copy of the material price list edited in Settings; only written
+  // back to state.settings (and localStorage) when "Save Price List" is clicked.
+  let materialsDraft = structuredClone(state.settings.materials);
+
+  // A quote is "locked" once it has been saved at least once, so its costing
+  // stays an accurate historical record even if Settings prices change later.
+  function isQuoteSaved(quote) {
+    return state.quotes.some(q => q.id === quote.id);
+  }
+
+  // Keeps an unsaved quote's default (settings-linked) BOM lines matched to
+  // the current Settings price list, unless a line's price was hand-edited.
+  function syncDefaultBomPrices(quote) {
+    if (isQuoteSaved(quote)) return;
+    quote.bom.forEach(line => {
+      const material = state.settings.materials.find(m => m.id === line.materialId);
+      if (!material) return; // custom line item, not tied to the price list
+      line.name = material.name;
+      line.unit = material.unit;
+      if (!line.priceOverridden) line.unitPrice = material.unitPrice;
+    });
+  }
+
   function blankQuote() {
     const s = state.settings;
     return {
@@ -236,7 +259,7 @@
       cutList: [],
       cutListTemplateId: null,
       bom: s.materials.map(m => ({
-        materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0,
+        materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0, priceOverridden: false,
       })),
       labourHours: 0,
       labourRate: s.labourRate,
@@ -338,6 +361,7 @@
   }
 
   function renderBom() {
+    syncDefaultBomPrices(state.current);
     const tbody = el('bomBody');
     tbody.innerHTML = '';
     state.current.bom.forEach((line, idx) => {
@@ -529,6 +553,7 @@
       const line = state.current.bom[idx];
       if (field === 'qty' || field === 'unitPrice') {
         line[field] = Number(t.value) || 0;
+        if (field === 'unitPrice') line.priceOverridden = true;
         const lineTotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
         const totalCell = document.querySelector(`[data-total-for="${idx}"]`);
         if (totalCell) totalCell.textContent = money(lineTotal);
@@ -550,7 +575,7 @@
     });
 
     el('btnAddLine').addEventListener('click', () => {
-      state.current.bom.push({ materialId: uid(), name: 'New item', unit: 'each', unitPrice: 0, qty: 1 });
+      state.current.bom.push({ materialId: uid(), name: 'New item', unit: 'each', unitPrice: 0, qty: 1, priceOverridden: true });
       renderBom();
       renderSummary();
       saveDraft();
@@ -876,16 +901,29 @@
   function renderMaterialsTable() {
     const tbody = el('materialsBody');
     tbody.innerHTML = '';
-    state.settings.materials.forEach((m, idx) => {
+    materialsDraft.forEach((m, idx) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(m.name)}" /></td>
         <td><input type="text" data-idx="${idx}" data-field="unit" value="${escapeAttr(m.unit)}" style="min-width:60px" /></td>
-        <td><input type="number" min="0" step="0.01" data-idx="${idx}" data-field="unitPrice" value="${m.unitPrice}" /></td>
+        <td><input type="number" min="0" step="0.0001" data-idx="${idx}" data-field="unitPrice" value="${m.unitPrice}" /></td>
         <td><button type="button" class="icon-btn" data-remove-material="${idx}" title="Remove material">✕</button></td>
       `;
       tbody.appendChild(tr);
     });
+    el('materialsSaveStatus').textContent = '';
+  }
+
+  function saveMaterialsDraft() {
+    state.settings.materials = structuredClone(materialsDraft);
+    saveSettings(state.settings);
+    renderBom();
+    renderSummary();
+    const status = el('materialsSaveStatus');
+    status.style.color = '#2f6f4e';
+    status.textContent = 'Price list saved.';
+    clearTimeout(saveMaterialsDraft._timer);
+    saveMaterialsDraft._timer = setTimeout(() => { status.textContent = ''; }, 3000);
   }
 
   function bindSettingsEvents() {
@@ -907,24 +945,24 @@
       const idx = t.dataset.idx;
       const field = t.dataset.field;
       if (idx === undefined || !field) return;
-      const m = state.settings.materials[idx];
+      const m = materialsDraft[idx];
       m[field] = field === 'unitPrice' ? (Number(t.value) || 0) : t.value;
-      saveSettings(state.settings);
+      el('materialsSaveStatus').textContent = '';
     });
 
     el('materialsBody').addEventListener('click', e => {
       const idx = e.target.dataset.removeMaterial;
       if (idx === undefined) return;
-      state.settings.materials.splice(Number(idx), 1);
-      saveSettings(state.settings);
+      materialsDraft.splice(Number(idx), 1);
       renderMaterialsTable();
     });
 
     el('btnAddMaterial').addEventListener('click', () => {
-      state.settings.materials.push({ id: uid(), name: 'New material', unit: 'each', unitPrice: 0 });
-      saveSettings(state.settings);
+      materialsDraft.push({ id: uid(), name: 'New material', unit: 'each', unitPrice: 0 });
       renderMaterialsTable();
     });
+
+    el('btnSaveMaterials').addEventListener('click', saveMaterialsDraft);
 
     el('btnExport').addEventListener('click', exportBackup);
     el('btnImport').addEventListener('click', () => el('importFile').click());
@@ -955,10 +993,13 @@
         if (!confirm('This will replace all current quotes and settings on this device. Continue?')) return;
         state.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), data.settings);
         state.quotes = data.quotes;
+        materialsDraft = structuredClone(state.settings.materials);
         saveSettings(state.settings);
         saveQuotes(state.quotes);
         renderSettingsForm();
         renderSavedList();
+        renderBom();
+        renderSummary();
         alert('Backup imported successfully.');
       } catch (err) {
         alert('Could not import file: ' + err.message);

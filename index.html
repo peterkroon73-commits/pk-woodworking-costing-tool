@@ -201,6 +201,7 @@
 
     <div class="card">
       <h2>Material Price List</h2>
+      <p class="hint">Edits here are provisional until you tap Save Price List. In-progress quotes pick up saved prices automatically; already-saved quotes keep the price they were quoted at.</p>
       <div class="table-scroll">
         <table id="materialsTable" class="bom-table">
           <thead>
@@ -209,7 +210,11 @@
           <tbody id="materialsBody"></tbody>
         </table>
       </div>
-      <button type="button" id="btnAddMaterial" class="btn btn-ghost">+ Add material</button>
+      <div class="action-row">
+        <button type="button" id="btnAddMaterial" class="btn btn-ghost">+ Add material</button>
+        <button type="button" id="btnSaveMaterials" class="btn btn-primary">Save Price List</button>
+      </div>
+      <p id="materialsSaveStatus" class="save-status" aria-live="polite"></p>
     </div>
 
     <div class="card">

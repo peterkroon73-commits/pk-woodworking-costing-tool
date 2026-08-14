@@ -631,6 +631,27 @@
 
   function buildCostingSummaryText(quote) {
     const t = computeTotals(quote);
+    const cutResult = packCutList(quote.cutList);
+
+    const quoteNo = quote.quoteNumber || previewQuoteNumber() + ' (draft)';
+    const headerLines = [
+      `Quote: ${quoteNo}`,
+      `Client: ${quote.client.name || '(no client name)'}`,
+      `Date: ${formatDateLong(quote.date)}`,
+    ];
+    if (quote.client.notes) headerLines.push(`Notes: ${quote.client.notes}`);
+
+    const cutListLines = (quote.cutList || []).map(row =>
+      `${row.name || 'Unnamed part'}: ${Number(row.length) || 0}mm x ${Number(row.qty) || 0}`
+    );
+    const cutListText = cutListLines.length ? cutListLines.join('\n') : '(no items)';
+
+    const palingsLines = [`Palings required: ${cutResult.palingsRequired} (1800mm stock, 3mm kerf)`];
+    if (cutResult.offcuts.length) {
+      const offcutList = cutResult.offcuts.map(o => o + 'mm').join(', ');
+      palingsLines.push(`Offcuts: ${offcutList} (${cutResult.totalOffcut}mm total reusable)`);
+    }
+
     const bomLines = quote.bom.filter(line => Number(line.qty) > 0);
     const bomText = bomLines
       .map(line => {
@@ -640,6 +661,13 @@
       .join('\n');
 
     return [
+      ...headerLines,
+      '',
+      'CUT LIST',
+      cutListText,
+      '',
+      ...palingsLines,
+      '',
       'BILL OF MATERIALS',
       bomText || '(no items)',
       '',

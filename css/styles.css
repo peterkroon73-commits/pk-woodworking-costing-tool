@@ -218,6 +218,11 @@ input[readonly] {
   font-size: 1.1rem;
   cursor: pointer;
   padding: 0.3rem 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .summary-card { background: #fbf8f2; }

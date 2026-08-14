@@ -626,6 +626,48 @@
 
     el('btnSaveQuote').addEventListener('click', saveCurrentQuote);
     el('btnPrintQuote').addEventListener('click', printCurrentQuote);
+    el('btnCopySummary').addEventListener('click', copyCostingSummary);
+  }
+
+  function buildCostingSummaryText(quote) {
+    const t = computeTotals(quote);
+    const bomLines = quote.bom.filter(line => Number(line.qty) > 0);
+    const bomText = bomLines
+      .map(line => {
+        const subtotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
+        return `${line.name}: ${Number(line.qty)} ${line.unit} @ ${money(line.unitPrice)} = ${money(subtotal)}`;
+      })
+      .join('\n');
+
+    return [
+      'BILL OF MATERIALS',
+      bomText || '(no items)',
+      '',
+      'COSTING',
+      `Direct materials: ${money(t.materialsCost)}`,
+      `Labour: ${Number(quote.labourHours)}hr @ ${money(quote.labourRate)}/hr = ${money(t.labourCost)}`,
+      `Workshop overhead: ${money(t.overheadCost)}`,
+      `Total true cost: ${money(t.totalCost)}`,
+      `Selling price: ${money(t.sellingPrice)}`,
+      `Profit: ${money(t.profit)} (${t.profitMargin.toFixed(1)}%)`,
+    ].join('\n');
+  }
+
+  function copyCostingSummary() {
+    const text = buildCostingSummaryText(state.current);
+    navigator.clipboard.writeText(text).then(() => {
+      showCopyStatus('Copied!', '#2f6f4e');
+    }).catch(() => {
+      showCopyStatus('Could not copy — try again.', '#a4372a');
+    });
+  }
+
+  function showCopyStatus(message, color) {
+    const status = el('copyStatus');
+    status.style.color = color;
+    status.textContent = message;
+    clearTimeout(showCopyStatus._timer);
+    showCopyStatus._timer = setTimeout(() => { status.textContent = ''; }, 2000);
   }
 
   function saveCurrentQuote() {

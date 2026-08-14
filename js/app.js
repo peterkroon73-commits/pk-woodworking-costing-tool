@@ -352,9 +352,7 @@
         <td>${isCustom
           ? `<input type="text" data-idx="${idx}" data-field="unit" value="${escapeAttr(line.unit)}" style="min-width:60px" />`
           : escapeHtml(line.unit)}</td>
-        <td>${isCustom
-          ? `<input type="number" min="0" step="0.01" data-idx="${idx}" data-field="unitPrice" value="${line.unitPrice}" />`
-          : money(line.unitPrice)}</td>
+        <td><input type="number" min="0" step="0.0001" data-idx="${idx}" data-field="unitPrice" value="${line.unitPrice}" /></td>
         <td>${isPalingLocked
           ? `<div class="qty-locked"><input type="number" value="${line.qty}" disabled /><span class="qty-locked-note">from cut list</span></div>`
           : `<input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${line.qty}" />`}</td>

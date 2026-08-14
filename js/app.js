@@ -7,6 +7,8 @@
     draft: 'pkw_draft_v1',
   };
 
+  const GLUE_PRICE_PER_ML = 0.0251; // $93 / 3700mL, rounded to 4dp
+
   const DEFAULT_SETTINGS = {
     labourRate: 40,
     overheadPercent: 10,
@@ -19,9 +21,20 @@
       { id: 'castor', name: 'Castors', unit: 'each', unitPrice: 4.00 },
       { id: 'screws', name: 'Screws', unit: 'each', unitPrice: 0.08 },
       { id: 'brads', name: 'Brads', unit: 'each', unitPrice: 0.05 },
-      { id: 'glue', name: 'Glue', unit: 'application', unitPrice: 1.50 },
+      { id: 'glue', name: 'Glue', unit: 'mL', unitPrice: GLUE_PRICE_PER_ML },
     ],
   };
+
+  // One-time upgrade for devices that already saved the old "application"-based
+  // glue default before the mL pricing switch — leaves any custom price alone.
+  function migrateGlueDefault(settings) {
+    const glue = settings.materials.find(m => m.id === 'glue');
+    if (glue && glue.unit === 'application' && glue.unitPrice === 1.5) {
+      glue.unit = 'mL';
+      glue.unitPrice = GLUE_PRICE_PER_ML;
+    }
+    return settings;
+  }
 
   const CUT_STOCK_LENGTH = 1800; // mm, standard paling length
   const CUT_KERF = 3;            // mm, saw-cut allowance between pieces on the same paling
@@ -158,7 +171,7 @@
       const raw = localStorage.getItem(STORAGE.settings);
       if (!raw) return structuredClone(DEFAULT_SETTINGS);
       const parsed = JSON.parse(raw);
-      return Object.assign(structuredClone(DEFAULT_SETTINGS), parsed);
+      return migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), parsed));
     } catch (e) {
       console.error('Failed to load settings', e);
       return structuredClone(DEFAULT_SETTINGS);

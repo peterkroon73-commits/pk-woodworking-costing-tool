@@ -23,6 +23,9 @@
     ],
   };
 
+  const CUT_STOCK_LENGTH = 1800; // mm, standard paling length
+  const CUT_KERF = 3;            // mm, saw-cut allowance between pieces on the same paling
+
   function uid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -108,6 +111,8 @@
     priceOverridden: false, // has user manually edited selling price for this quote?
   };
 
+  let lastCutListResult = { palingsRequired: 0, offcuts: [], totalOffcut: 0, warnings: [] };
+
   function blankQuote() {
     const s = state.settings;
     return {
@@ -117,6 +122,7 @@
       status: 'Draft',
       validDays: s.validDays,
       client: { name: '', contact: '', notes: '' },
+      cutList: [],
       bom: s.materials.map(m => ({
         materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0,
       })),
@@ -160,6 +166,46 @@
     return { materialsCost, labourCost, directCost, overheadCost, totalCost, suggestedPrice, sellingPrice, profit, profitMargin };
   }
 
+  // First-fit-decreasing bin packing: sorts pieces largest-first and drops each
+  // into the first paling with room, opening a new paling when none fits.
+  function packCutList(cutList) {
+    const pieces = [];
+    const warnings = [];
+
+    (cutList || []).forEach(row => {
+      const length = Number(row.length) || 0;
+      const qty = Math.max(0, Math.floor(Number(row.qty) || 0));
+      if (length <= 0 || qty <= 0) return;
+      if (length > CUT_STOCK_LENGTH) {
+        warnings.push(`"${row.name || 'Unnamed part'}" at ${length}mm is longer than a ${CUT_STOCK_LENGTH}mm paling and can't be cut from one.`);
+        return;
+      }
+      for (let i = 0; i < qty; i++) pieces.push({ length, name: row.name || 'Unnamed part' });
+    });
+
+    pieces.sort((a, b) => b.length - a.length);
+
+    const bins = [];
+    pieces.forEach(piece => {
+      let target = bins.find(bin => {
+        const cost = bin.items.length === 0 ? piece.length : piece.length + CUT_KERF;
+        return bin.used + cost <= CUT_STOCK_LENGTH;
+      });
+      if (!target) {
+        target = { used: 0, items: [] };
+        bins.push(target);
+      }
+      const cost = target.items.length === 0 ? piece.length : piece.length + CUT_KERF;
+      target.used += cost;
+      target.items.push(piece);
+    });
+
+    const offcuts = bins.map(bin => CUT_STOCK_LENGTH - bin.used);
+    const totalOffcut = offcuts.reduce((a, b) => a + b, 0);
+
+    return { palingsRequired: bins.length, offcuts, totalOffcut, warnings };
+  }
+
   // ---------------------------------------------------------------------
   // Rendering: Quote tab
   // ---------------------------------------------------------------------
@@ -186,6 +232,7 @@
       const tr = document.createElement('tr');
       const lineTotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
       const isCustom = !state.settings.materials.some(m => m.id === line.materialId);
+      const isPalingLocked = line.materialId === 'paling' && lastCutListResult.palingsRequired > 0;
       tr.innerHTML = `
         <td>${isCustom
           ? `<input class="name-input" type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(line.name)}" />`
@@ -196,12 +243,57 @@
         <td>${isCustom
           ? `<input type="number" min="0" step="0.01" data-idx="${idx}" data-field="unitPrice" value="${line.unitPrice}" />`
           : money(line.unitPrice)}</td>
-        <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${line.qty}" /></td>
+        <td>${isPalingLocked
+          ? `<div class="qty-locked"><input type="number" value="${line.qty}" disabled /><span class="qty-locked-note">from cut list</span></div>`
+          : `<input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${line.qty}" />`}</td>
         <td class="line-total" data-total-for="${idx}">${money(lineTotal)}</td>
         <td>${isCustom ? `<button type="button" class="icon-btn" data-remove="${idx}" title="Remove item">✕</button>` : ''}</td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function renderCutListRows() {
+    const tbody = el('cutListBody');
+    tbody.innerHTML = '';
+    (state.current.cutList || []).forEach((row, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="name-input" type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(row.name)}" placeholder="e.g. Side panel" /></td>
+        <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="length" value="${row.length}" /></td>
+        <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${row.qty}" /></td>
+        <td><button type="button" class="icon-btn" data-remove-cut="${idx}" title="Remove item">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function refreshCutList() {
+    lastCutListResult = packCutList(state.current.cutList);
+
+    const container = el('cutListResult');
+    if (lastCutListResult.palingsRequired === 0 && lastCutListResult.warnings.length === 0) {
+      container.innerHTML = '<p class="hint">Add cut list items to calculate palings required.</p>';
+    } else {
+      let html = '';
+      if (lastCutListResult.palingsRequired > 0) {
+        const label = lastCutListResult.palingsRequired === 1 ? 'paling' : 'palings';
+        html += `<div class="cutlist-summary"><strong>${lastCutListResult.palingsRequired}</strong> ${label} required <span class="hint">(1800mm stock, 3mm kerf)</span></div>`;
+        if (lastCutListResult.offcuts.length) {
+          const offcutList = lastCutListResult.offcuts.map(o => o + 'mm').join(', ');
+          html += `<div class="cutlist-offcuts">Offcuts: ${offcutList} <span class="hint">(${lastCutListResult.totalOffcut}mm total reusable)</span></div>`;
+        }
+      }
+      lastCutListResult.warnings.forEach(w => {
+        html += `<div class="cutlist-warning">${escapeHtml(w)}</div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    const palingLine = state.current.bom.find(l => l.materialId === 'paling');
+    if (palingLine && lastCutListResult.palingsRequired > 0) {
+      palingLine.qty = lastCutListResult.palingsRequired;
+    }
   }
 
   function renderLabourOverhead() {
@@ -225,6 +317,8 @@
   function renderQuoteForm() {
     renderQuoteMeta();
     renderClient();
+    renderCutListRows();
+    refreshCutList();
     renderBom();
     renderLabourOverhead();
     renderSummary();
@@ -292,6 +386,41 @@
 
     el('btnAddLine').addEventListener('click', () => {
       state.current.bom.push({ materialId: uid(), name: 'New item', unit: 'each', unitPrice: 0, qty: 1 });
+      renderBom();
+      renderSummary();
+      saveDraft();
+    });
+
+    el('cutListBody').addEventListener('input', e => {
+      const t = e.target;
+      const idx = t.dataset.idx;
+      const field = t.dataset.field;
+      if (idx === undefined || !field) return;
+      const row = state.current.cutList[idx];
+      row[field] = (field === 'length' || field === 'qty') ? (Number(t.value) || 0) : t.value;
+      refreshCutList();
+      if (!state.priceOverridden) state.current.sellingPriceOverride = null;
+      renderBom();
+      renderSummary();
+      saveDraft();
+    });
+
+    el('cutListBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeCut;
+      if (idx === undefined) return;
+      state.current.cutList.splice(Number(idx), 1);
+      renderCutListRows();
+      refreshCutList();
+      if (!state.priceOverridden) state.current.sellingPriceOverride = null;
+      renderBom();
+      renderSummary();
+      saveDraft();
+    });
+
+    el('btnAddCutItem').addEventListener('click', () => {
+      state.current.cutList.push({ id: uid(), name: '', length: 0, qty: 1 });
+      renderCutListRows();
+      refreshCutList();
       renderBom();
       renderSummary();
       saveDraft();
@@ -460,6 +589,7 @@
 
       if (btn.dataset.action === 'load') {
         state.current = structuredClone(q);
+        state.current.cutList = state.current.cutList || [];
         state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
         renderQuoteForm();
         saveDraft();
@@ -472,6 +602,7 @@
         copy.status = 'Draft';
         copy.createdAt = new Date().toISOString();
         copy.updatedAt = copy.createdAt;
+        copy.cutList = copy.cutList || [];
         state.current = copy;
         state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
         renderQuoteForm();
@@ -625,6 +756,7 @@
   function init() {
     const draft = loadDraft();
     state.current = draft || blankQuote();
+    state.current.cutList = state.current.cutList || [];
     state.priceOverridden = state.current.sellingPriceOverride !== null && state.current.sellingPriceOverride !== undefined;
 
     bindTabs();

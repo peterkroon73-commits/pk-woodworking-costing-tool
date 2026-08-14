@@ -70,6 +70,26 @@
     </div>
 
     <div class="card">
+      <h2>Cut List</h2>
+      <p class="hint">List the parts you need to cut. Palings required (below) is calculated automatically from this list.</p>
+      <div class="table-scroll">
+        <table id="cutListTable" class="bom-table">
+          <thead>
+            <tr>
+              <th>Part name</th>
+              <th>Length (mm)</th>
+              <th>Qty needed</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cutListBody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="btnAddCutItem" class="btn btn-ghost">+ Add cut list item</button>
+      <div id="cutListResult" class="cutlist-result"></div>
+    </div>
+
+    <div class="card">
       <h2>Bill of Materials</h2>
       <div class="table-scroll">
         <table id="bomTable" class="bom-table">

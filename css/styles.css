@@ -324,6 +324,51 @@ input[readonly] {
   font-size: 0.85rem;
 }
 
+.cutlist-result {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: #f4f0e8;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.cutlist-summary {
+  font-size: 1rem;
+}
+
+.cutlist-summary strong {
+  color: var(--wood-dark);
+  font-size: 1.15rem;
+}
+
+.cutlist-offcuts {
+  margin-top: 0.4rem;
+  color: var(--muted);
+}
+
+.cutlist-warning {
+  margin-top: 0.4rem;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.qty-locked {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.qty-locked input {
+  background: #f4f0e8;
+  color: var(--muted);
+}
+
+.qty-locked-note {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .empty-state {
   color: var(--muted);
   font-size: 0.9rem;

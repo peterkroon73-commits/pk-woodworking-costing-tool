@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+<meta name="theme-color" content="#3c2a1e" />
+<title>PK Woodworking — Quote &amp; Costing Tool</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='16' fill='%233c2a1e'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23c8a578' font-family='Georgia,serif'%3EW%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<header class="app-header">
+  <div class="header-row">
+    <h1>PK Woodworking</h1>
+    <span class="subtitle">Quote &amp; Costing Tool</span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab-btn active" data-tab="quote" role="tab" aria-selected="true">Quote</button>
+    <button type="button" class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved Quotes</button>
+    <button type="button" class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ===================== QUOTE TAB ===================== -->
+  <section id="tab-quote" class="tab-panel active" role="tabpanel">
+
+    <div class="card">
+      <div class="quote-meta">
+        <div class="field">
+          <label for="quoteNumber">Quote #</label>
+          <input type="text" id="quoteNumber" readonly />
+        </div>
+        <div class="field">
+          <label for="quoteDate">Date</label>
+          <input type="date" id="quoteDate" />
+        </div>
+        <div class="field">
+          <label for="quoteStatus">Status</label>
+          <select id="quoteStatus">
+            <option value="Draft">Draft</option>
+            <option value="Sent">Sent</option>
+            <option value="Accepted">Accepted</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="validDays">Valid for (days)</label>
+          <input type="number" id="validDays" min="1" step="1" />
+        </div>
+      </div>
+      <button type="button" id="btnNewQuote" class="btn btn-ghost">+ Start New Quote</button>
+    </div>
+
+    <div class="card">
+      <h2>Client Details</h2>
+      <div class="field">
+        <label for="clientName">Client name *</label>
+        <input type="text" id="clientName" placeholder="e.g. Jane Smith" />
+      </div>
+      <div class="field">
+        <label for="clientContact">Contact (phone / email)</label>
+        <input type="text" id="clientContact" placeholder="e.g. 0400 000 000" />
+      </div>
+      <div class="field">
+        <label for="clientNotes">Order notes</label>
+        <textarea id="clientNotes" rows="3" placeholder="Dimensions, colour, delivery instructions..."></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bill of Materials</h2>
+      <div class="table-scroll">
+        <table id="bomTable" class="bom-table">
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Unit</th>
+              <th>Unit price</th>
+              <th>Qty</th>
+              <th>Line total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="bomBody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="btnAddLine" class="btn btn-ghost">+ Add custom item</button>
+    </div>
+
+    <div class="card">
+      <h2>Labour &amp; Overhead</h2>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="labourHours">Labour hours</label>
+          <input type="number" id="labourHours" min="0" step="0.25" value="0" />
+        </div>
+        <div class="field">
+          <label for="labourRate">Rate ($/hr)</label>
+          <input type="number" id="labourRate" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label for="overheadPercent">Overhead %</label>
+          <input type="number" id="overheadPercent" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label for="markupPercent">Markup %</label>
+          <input type="number" id="markupPercent" min="0" step="0.5" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card summary-card">
+      <h2>Cost Summary <span class="badge-internal">internal — not printed to customer</span></h2>
+      <dl class="summary-list">
+        <div><dt>Direct materials</dt><dd id="sumMaterials">$0.00</dd></div>
+        <div><dt>Labour</dt><dd id="sumLabour">$0.00</dd></div>
+        <div><dt>Workshop overhead</dt><dd id="sumOverhead">$0.00</dd></div>
+        <div class="divider"></div>
+        <div><dt>Total true cost</dt><dd id="sumTotalCost">$0.00</dd></div>
+        <div>
+          <dt>Selling price</dt>
+          <dd>
+            <input type="number" id="sellingPrice" min="0" step="0.01" class="selling-price-input" />
+            <button type="button" id="btnResetPrice" class="btn-link">reset to markup</button>
+          </dd>
+        </div>
+        <div class="divider"></div>
+        <div><dt>Profit</dt><dd id="sumProfit">$0.00</dd></div>
+        <div><dt>Profit margin</dt><dd id="sumMargin">0%</dd></div>
+      </dl>
+      <div class="action-row">
+        <button type="button" id="btnSaveQuote" class="btn btn-primary">Save Quote</button>
+        <button type="button" id="btnPrintQuote" class="btn btn-secondary">Print / Save as PDF</button>
+      </div>
+      <p id="saveStatus" class="save-status" aria-live="polite"></p>
+    </div>
+
+  </section>
+
+  <!-- ===================== SAVED QUOTES TAB ===================== -->
+  <section id="tab-saved" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Saved Quotes</h2>
+      <input type="search" id="searchQuotes" placeholder="Search by quote #, client name or status..." />
+      <div id="savedList" class="saved-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== SETTINGS TAB ===================== -->
+  <section id="tab-settings" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Defaults</h2>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="defLabourRate">Default labour rate ($/hr)</label>
+          <input type="number" id="defLabourRate" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label for="defOverheadPercent">Default overhead %</label>
+          <input type="number" id="defOverheadPercent" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label for="defMarkupPercent">Default markup %</label>
+          <input type="number" id="defMarkupPercent" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label for="defValidDays">Default quote validity (days)</label>
+          <input type="number" id="defValidDays" min="1" step="1" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Material Price List</h2>
+      <div class="table-scroll">
+        <table id="materialsTable" class="bom-table">
+          <thead>
+            <tr><th>Material</th><th>Unit</th><th>Unit price</th><th></th></tr>
+          </thead>
+          <tbody id="materialsBody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="btnAddMaterial" class="btn btn-ghost">+ Add material</button>
+    </div>
+
+    <div class="card">
+      <h2>Quote Numbering</h2>
+      <div class="field">
+        <label for="quotePrefix">Prefix</label>
+        <input type="text" id="quotePrefix" />
+      </div>
+      <div class="field">
+        <label for="quoteCounter">Next quote number</label>
+        <input type="number" id="quoteCounter" min="1" step="1" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Backup</h2>
+      <p class="hint">Quotes are stored on this device only. Export a backup regularly, especially before clearing browser data or switching phones.</p>
+      <div class="action-row">
+        <button type="button" id="btnExport" class="btn btn-secondary">Export backup (JSON)</button>
+        <button type="button" id="btnImport" class="btn btn-ghost">Import backup</button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Printable customer-facing quote (hidden on screen, shown only when printing) -->
+<div id="print-quote" class="print-only"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

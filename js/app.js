@@ -1,0 +1,641 @@
+(() => {
+  'use strict';
+
+  const STORAGE = {
+    settings: 'pkw_settings_v1',
+    quotes: 'pkw_quotes_v1',
+    draft: 'pkw_draft_v1',
+  };
+
+  const DEFAULT_SETTINGS = {
+    labourRate: 40,
+    overheadPercent: 10,
+    markupPercent: 30,
+    validDays: 30,
+    quotePrefix: 'PKW-Q-',
+    quoteCounter: 1,
+    materials: [
+      { id: 'paling', name: 'Palings', unit: 'each', unitPrice: 3.50 },
+      { id: 'castor', name: 'Castors', unit: 'each', unitPrice: 4.00 },
+      { id: 'screws', name: 'Screws', unit: 'each', unitPrice: 0.08 },
+      { id: 'brads', name: 'Brads', unit: 'each', unitPrice: 0.05 },
+      { id: 'glue', name: 'Glue', unit: 'application', unitPrice: 1.50 },
+    ],
+  };
+
+  function uid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+  }
+
+  function money(n) {
+    const v = Number.isFinite(n) ? n : 0;
+    return '$' + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function addDays(isoDate, days) {
+    const d = new Date(isoDate + 'T00:00:00');
+    d.setDate(d.getDate() + (Number(days) || 0));
+    return d;
+  }
+
+  function formatDateLong(dateObjOrISO) {
+    const d = typeof dateObjOrISO === 'string' ? new Date(dateObjOrISO + 'T00:00:00') : dateObjOrISO;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  // ---------------------------------------------------------------------
+  // Persistence
+  // ---------------------------------------------------------------------
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORAGE.settings);
+      if (!raw) return structuredClone(DEFAULT_SETTINGS);
+      const parsed = JSON.parse(raw);
+      return Object.assign(structuredClone(DEFAULT_SETTINGS), parsed);
+    } catch (e) {
+      console.error('Failed to load settings', e);
+      return structuredClone(DEFAULT_SETTINGS);
+    }
+  }
+
+  function saveSettings(settings) {
+    localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
+  }
+
+  function loadQuotes() {
+    try {
+      const raw = localStorage.getItem(STORAGE.quotes);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Failed to load quotes', e);
+      return [];
+    }
+  }
+
+  function saveQuotes(quotes) {
+    localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
+  }
+
+  function saveDraft() {
+    try {
+      localStorage.setItem(STORAGE.draft, JSON.stringify(state.current));
+    } catch (e) { /* non-fatal */ }
+  }
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(STORAGE.draft);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
+
+  const state = {
+    settings: loadSettings(),
+    quotes: loadQuotes(),
+    current: null,       // quote currently being edited
+    priceOverridden: false, // has user manually edited selling price for this quote?
+  };
+
+  function blankQuote() {
+    const s = state.settings;
+    return {
+      id: uid(),
+      quoteNumber: '',       // assigned on first save
+      date: todayISO(),
+      status: 'Draft',
+      validDays: s.validDays,
+      client: { name: '', contact: '', notes: '' },
+      bom: s.materials.map(m => ({
+        materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0,
+      })),
+      labourHours: 0,
+      labourRate: s.labourRate,
+      overheadPercent: s.overheadPercent,
+      markupPercent: s.markupPercent,
+      sellingPriceOverride: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function previewQuoteNumber() {
+    return state.settings.quotePrefix + String(state.settings.quoteCounter).padStart(4, '0');
+  }
+
+  function assignQuoteNumberIfNeeded(quote) {
+    if (quote.quoteNumber) return;
+    quote.quoteNumber = previewQuoteNumber();
+    state.settings.quoteCounter += 1;
+    saveSettings(state.settings);
+  }
+
+  // ---------------------------------------------------------------------
+  // Computation
+  // ---------------------------------------------------------------------
+
+  function computeTotals(quote) {
+    const materialsCost = quote.bom.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unitPrice) || 0), 0);
+    const labourCost = (Number(quote.labourHours) || 0) * (Number(quote.labourRate) || 0);
+    const directCost = materialsCost + labourCost;
+    const overheadCost = directCost * ((Number(quote.overheadPercent) || 0) / 100);
+    const totalCost = directCost + overheadCost;
+    const suggestedPrice = totalCost * (1 + (Number(quote.markupPercent) || 0) / 100);
+    const sellingPrice = quote.sellingPriceOverride !== null && quote.sellingPriceOverride !== undefined
+      ? Number(quote.sellingPriceOverride)
+      : suggestedPrice;
+    const profit = sellingPrice - totalCost;
+    const profitMargin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0;
+    return { materialsCost, labourCost, directCost, overheadCost, totalCost, suggestedPrice, sellingPrice, profit, profitMargin };
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: Quote tab
+  // ---------------------------------------------------------------------
+
+  const el = (id) => document.getElementById(id);
+
+  function renderQuoteMeta() {
+    el('quoteNumber').value = state.current.quoteNumber || previewQuoteNumber() + ' (on save)';
+    el('quoteDate').value = state.current.date;
+    el('quoteStatus').value = state.current.status;
+    el('validDays').value = state.current.validDays;
+  }
+
+  function renderClient() {
+    el('clientName').value = state.current.client.name;
+    el('clientContact').value = state.current.client.contact;
+    el('clientNotes').value = state.current.client.notes;
+  }
+
+  function renderBom() {
+    const tbody = el('bomBody');
+    tbody.innerHTML = '';
+    state.current.bom.forEach((line, idx) => {
+      const tr = document.createElement('tr');
+      const lineTotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
+      const isCustom = !state.settings.materials.some(m => m.id === line.materialId);
+      tr.innerHTML = `
+        <td>${isCustom
+          ? `<input class="name-input" type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(line.name)}" />`
+          : escapeHtml(line.name)}</td>
+        <td>${isCustom
+          ? `<input type="text" data-idx="${idx}" data-field="unit" value="${escapeAttr(line.unit)}" style="min-width:60px" />`
+          : escapeHtml(line.unit)}</td>
+        <td>${isCustom
+          ? `<input type="number" min="0" step="0.01" data-idx="${idx}" data-field="unitPrice" value="${line.unitPrice}" />`
+          : money(line.unitPrice)}</td>
+        <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${line.qty}" /></td>
+        <td class="line-total" data-total-for="${idx}">${money(lineTotal)}</td>
+        <td>${isCustom ? `<button type="button" class="icon-btn" data-remove="${idx}" title="Remove item">✕</button>` : ''}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderLabourOverhead() {
+    el('labourHours').value = state.current.labourHours;
+    el('labourRate').value = state.current.labourRate;
+    el('overheadPercent').value = state.current.overheadPercent;
+    el('markupPercent').value = state.current.markupPercent;
+  }
+
+  function renderSummary() {
+    const t = computeTotals(state.current);
+    el('sumMaterials').textContent = money(t.materialsCost);
+    el('sumLabour').textContent = money(t.labourCost);
+    el('sumOverhead').textContent = money(t.overheadCost);
+    el('sumTotalCost').textContent = money(t.totalCost);
+    el('sellingPrice').value = t.sellingPrice.toFixed(2);
+    el('sumProfit').textContent = money(t.profit);
+    el('sumMargin').textContent = t.profitMargin.toFixed(1) + '%';
+  }
+
+  function renderQuoteForm() {
+    renderQuoteMeta();
+    renderClient();
+    renderBom();
+    renderLabourOverhead();
+    renderSummary();
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ---------------------------------------------------------------------
+  // Quote tab: event wiring
+  // ---------------------------------------------------------------------
+
+  function newQuote() {
+    state.current = blankQuote();
+    state.priceOverridden = false;
+    renderQuoteForm();
+    saveDraft();
+    el('saveStatus').textContent = '';
+  }
+
+  function bindQuoteEvents() {
+    el('btnNewQuote').addEventListener('click', () => {
+      if (confirm('Start a new blank quote? Unsaved changes to the current quote will be lost.')) {
+        newQuote();
+      }
+    });
+
+    el('quoteDate').addEventListener('change', e => { state.current.date = e.target.value; saveDraft(); });
+    el('quoteStatus').addEventListener('change', e => { state.current.status = e.target.value; saveDraft(); });
+    el('validDays').addEventListener('input', e => { state.current.validDays = Number(e.target.value) || 0; saveDraft(); });
+
+    el('clientName').addEventListener('input', e => { state.current.client.name = e.target.value; saveDraft(); });
+    el('clientContact').addEventListener('input', e => { state.current.client.contact = e.target.value; saveDraft(); });
+    el('clientNotes').addEventListener('input', e => { state.current.client.notes = e.target.value; saveDraft(); });
+
+    el('bomBody').addEventListener('input', e => {
+      const t = e.target;
+      const idx = t.dataset.idx;
+      const field = t.dataset.field;
+      if (idx === undefined || !field) return;
+      const line = state.current.bom[idx];
+      if (field === 'qty' || field === 'unitPrice') {
+        line[field] = Number(t.value) || 0;
+        const lineTotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
+        const totalCell = document.querySelector(`[data-total-for="${idx}"]`);
+        if (totalCell) totalCell.textContent = money(lineTotal);
+      } else {
+        line[field] = t.value;
+      }
+      if (!state.priceOverridden) state.current.sellingPriceOverride = null;
+      renderSummary();
+      saveDraft();
+    });
+
+    el('bomBody').addEventListener('click', e => {
+      const idx = e.target.dataset.remove;
+      if (idx === undefined) return;
+      state.current.bom.splice(Number(idx), 1);
+      renderBom();
+      renderSummary();
+      saveDraft();
+    });
+
+    el('btnAddLine').addEventListener('click', () => {
+      state.current.bom.push({ materialId: uid(), name: 'New item', unit: 'each', unitPrice: 0, qty: 1 });
+      renderBom();
+      renderSummary();
+      saveDraft();
+    });
+
+    ['labourHours', 'labourRate', 'overheadPercent', 'markupPercent'].forEach(id => {
+      el(id).addEventListener('input', e => {
+        state.current[id] = Number(e.target.value) || 0;
+        if (id === 'markupPercent' || id === 'overheadPercent' || id === 'labourHours' || id === 'labourRate') {
+          if (!state.priceOverridden) state.current.sellingPriceOverride = null;
+        }
+        renderSummary();
+        saveDraft();
+      });
+    });
+
+    el('sellingPrice').addEventListener('input', e => {
+      state.priceOverridden = true;
+      state.current.sellingPriceOverride = Number(e.target.value) || 0;
+      const t = computeTotals(state.current);
+      el('sumProfit').textContent = money(t.profit);
+      el('sumMargin').textContent = t.profitMargin.toFixed(1) + '%';
+      saveDraft();
+    });
+
+    el('btnResetPrice').addEventListener('click', () => {
+      state.priceOverridden = false;
+      state.current.sellingPriceOverride = null;
+      renderSummary();
+      saveDraft();
+    });
+
+    el('btnSaveQuote').addEventListener('click', saveCurrentQuote);
+    el('btnPrintQuote').addEventListener('click', printCurrentQuote);
+  }
+
+  function saveCurrentQuote() {
+    if (!state.current.client.name.trim()) {
+      el('saveStatus').style.color = '#a4372a';
+      el('saveStatus').textContent = 'Please enter a client name before saving.';
+      el('clientName').focus();
+      return;
+    }
+    assignQuoteNumberIfNeeded(state.current);
+    state.current.updatedAt = new Date().toISOString();
+
+    const idx = state.quotes.findIndex(q => q.id === state.current.id);
+    if (idx >= 0) state.quotes[idx] = structuredClone(state.current);
+    else state.quotes.unshift(structuredClone(state.current));
+
+    saveQuotes(state.quotes);
+    renderQuoteMeta();
+    renderSavedList();
+
+    el('saveStatus').style.color = '#2f6f4e';
+    el('saveStatus').textContent = `Saved as ${state.current.quoteNumber}.`;
+    setTimeout(() => { el('saveStatus').textContent = ''; }, 4000);
+  }
+
+  function printCurrentQuote() {
+    const q = state.current;
+    if (!q.quoteNumber) {
+      // Give the customer doc a real number without permanently consuming one if not saved yet.
+    }
+    const t = computeTotals(q);
+    const quoteNo = q.quoteNumber || previewQuoteNumber() + ' (draft)';
+    const validUntil = formatDateLong(addDays(q.date, q.validDays));
+    const itemsHtml = q.bom
+      .filter(line => Number(line.qty) > 0)
+      .map(line => `<tr><td>${escapeHtml(line.name)}</td><td>${Number(line.qty)} ${escapeHtml(line.unit)}</td></tr>`)
+      .join('');
+    const labourRow = Number(q.labourHours) > 0 ? `<tr><td>Labour &amp; workmanship</td><td>${Number(q.labourHours)} hr</td></tr>` : '';
+
+    el('print-quote').innerHTML = `
+      <div class="pq-header">
+        <div>
+          <h1>PK Woodworking</h1>
+          <div>Custom timber &amp; joinery</div>
+        </div>
+        <div class="pq-meta">
+          <div><strong>Quote:</strong> ${escapeHtml(quoteNo)}</div>
+          <div><strong>Date:</strong> ${formatDateLong(q.date)}</div>
+          <div><strong>Valid until:</strong> ${validUntil}</div>
+        </div>
+      </div>
+
+      <div class="pq-section">
+        <h3>Prepared for</h3>
+        <div>${escapeHtml(q.client.name)}</div>
+        <div>${escapeHtml(q.client.contact)}</div>
+      </div>
+
+      ${q.client.notes ? `<div class="pq-section"><h3>Order notes</h3><div>${escapeHtml(q.client.notes)}</div></div>` : ''}
+
+      <div class="pq-section">
+        <h3>Items</h3>
+        <table class="pq-table">
+          <thead><tr><th>Description</th><th>Qty</th></tr></thead>
+          <tbody>${itemsHtml}${labourRow}</tbody>
+        </table>
+      </div>
+
+      <div class="pq-total-row">
+        <span>Total</span>
+        <span>${money(t.sellingPrice)}</span>
+      </div>
+
+      <div class="pq-footer">
+        <p>Thank you for choosing PK Woodworking. This quote is valid until ${validUntil}.</p>
+      </div>
+    `;
+
+    window.print();
+  }
+
+  // ---------------------------------------------------------------------
+  // Saved quotes tab
+  // ---------------------------------------------------------------------
+
+  function renderSavedList() {
+    const term = (el('searchQuotes').value || '').trim().toLowerCase();
+    const list = state.quotes.filter(q => {
+      if (!term) return true;
+      return (q.quoteNumber || '').toLowerCase().includes(term)
+        || (q.client.name || '').toLowerCase().includes(term)
+        || (q.status || '').toLowerCase().includes(term);
+    });
+
+    const container = el('savedList');
+    container.innerHTML = '';
+
+    if (list.length === 0) {
+      container.innerHTML = '<p class="empty-state">No quotes found.</p>';
+      return;
+    }
+
+    list.forEach(q => {
+      const t = computeTotals(q);
+      const div = document.createElement('div');
+      div.className = 'saved-item';
+      div.innerHTML = `
+        <div class="saved-item-top">
+          <strong>${escapeHtml(q.quoteNumber)}</strong>
+          <span class="status-pill ${escapeAttr(q.status)}">${escapeHtml(q.status)}</span>
+        </div>
+        <div class="saved-item-meta">${escapeHtml(q.client.name || '(no client name)')} · ${formatDateLong(q.date)} · ${money(t.sellingPrice)}</div>
+        <div class="saved-item-actions">
+          <button type="button" class="btn btn-ghost" data-action="load" data-id="${q.id}">Open</button>
+          <button type="button" class="btn btn-ghost" data-action="duplicate" data-id="${q.id}">Duplicate</button>
+          <button type="button" class="btn btn-danger" data-action="delete" data-id="${q.id}">Delete</button>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function bindSavedEvents() {
+    el('searchQuotes').addEventListener('input', renderSavedList);
+
+    el('savedList').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const q = state.quotes.find(q => q.id === id);
+      if (!q) return;
+
+      if (btn.dataset.action === 'load') {
+        state.current = structuredClone(q);
+        state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
+        renderQuoteForm();
+        saveDraft();
+        switchTab('quote');
+      } else if (btn.dataset.action === 'duplicate') {
+        const copy = structuredClone(q);
+        copy.id = uid();
+        copy.quoteNumber = '';
+        copy.date = todayISO();
+        copy.status = 'Draft';
+        copy.createdAt = new Date().toISOString();
+        copy.updatedAt = copy.createdAt;
+        state.current = copy;
+        state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
+        renderQuoteForm();
+        saveDraft();
+        switchTab('quote');
+      } else if (btn.dataset.action === 'delete') {
+        if (confirm(`Delete quote ${q.quoteNumber}? This cannot be undone.`)) {
+          state.quotes = state.quotes.filter(x => x.id !== id);
+          saveQuotes(state.quotes);
+          renderSavedList();
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Settings tab
+  // ---------------------------------------------------------------------
+
+  function renderSettingsForm() {
+    el('defLabourRate').value = state.settings.labourRate;
+    el('defOverheadPercent').value = state.settings.overheadPercent;
+    el('defMarkupPercent').value = state.settings.markupPercent;
+    el('defValidDays').value = state.settings.validDays;
+    el('quotePrefix').value = state.settings.quotePrefix;
+    el('quoteCounter').value = state.settings.quoteCounter;
+    renderMaterialsTable();
+  }
+
+  function renderMaterialsTable() {
+    const tbody = el('materialsBody');
+    tbody.innerHTML = '';
+    state.settings.materials.forEach((m, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(m.name)}" /></td>
+        <td><input type="text" data-idx="${idx}" data-field="unit" value="${escapeAttr(m.unit)}" style="min-width:60px" /></td>
+        <td><input type="number" min="0" step="0.01" data-idx="${idx}" data-field="unitPrice" value="${m.unitPrice}" /></td>
+        <td><button type="button" class="icon-btn" data-remove-material="${idx}" title="Remove material">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function bindSettingsEvents() {
+    const applyDefault = (field, id, parseNum = true) => {
+      el(id).addEventListener('input', e => {
+        state.settings[field] = parseNum ? (Number(e.target.value) || 0) : e.target.value;
+        saveSettings(state.settings);
+      });
+    };
+    applyDefault('labourRate', 'defLabourRate');
+    applyDefault('overheadPercent', 'defOverheadPercent');
+    applyDefault('markupPercent', 'defMarkupPercent');
+    applyDefault('validDays', 'defValidDays');
+    applyDefault('quotePrefix', 'quotePrefix', false);
+    applyDefault('quoteCounter', 'quoteCounter');
+
+    el('materialsBody').addEventListener('input', e => {
+      const t = e.target;
+      const idx = t.dataset.idx;
+      const field = t.dataset.field;
+      if (idx === undefined || !field) return;
+      const m = state.settings.materials[idx];
+      m[field] = field === 'unitPrice' ? (Number(t.value) || 0) : t.value;
+      saveSettings(state.settings);
+    });
+
+    el('materialsBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeMaterial;
+      if (idx === undefined) return;
+      state.settings.materials.splice(Number(idx), 1);
+      saveSettings(state.settings);
+      renderMaterialsTable();
+    });
+
+    el('btnAddMaterial').addEventListener('click', () => {
+      state.settings.materials.push({ id: uid(), name: 'New material', unit: 'each', unitPrice: 0 });
+      saveSettings(state.settings);
+      renderMaterialsTable();
+    });
+
+    el('btnExport').addEventListener('click', exportBackup);
+    el('btnImport').addEventListener('click', () => el('importFile').click());
+    el('importFile').addEventListener('change', importBackup);
+  }
+
+  function exportBackup() {
+    const payload = { settings: state.settings, quotes: state.quotes, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pk-woodworking-backup-${todayISO()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importBackup(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data.quotes || !data.settings) throw new Error('Invalid backup file');
+        if (!confirm('This will replace all current quotes and settings on this device. Continue?')) return;
+        state.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), data.settings);
+        state.quotes = data.quotes;
+        saveSettings(state.settings);
+        saveQuotes(state.quotes);
+        renderSettingsForm();
+        renderSavedList();
+        alert('Backup imported successfully.');
+      } catch (err) {
+        alert('Could not import file: ' + err.message);
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      const active = b.dataset.tab === name;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-' + name);
+    });
+  }
+
+  function bindTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+
+  function init() {
+    const draft = loadDraft();
+    state.current = draft || blankQuote();
+    state.priceOverridden = state.current.sellingPriceOverride !== null && state.current.sellingPriceOverride !== undefined;
+
+    bindTabs();
+    bindQuoteEvents();
+    bindSavedEvents();
+    bindSettingsEvents();
+
+    renderQuoteForm();
+    renderSavedList();
+    renderSettingsForm();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();

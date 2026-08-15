@@ -1267,7 +1267,25 @@
     return quote.itemDescription || 'Custom timber & joinery project — handmade treated pine';
   }
 
+  // Warns before sending a quote out with no real product description, so
+  // it never happens silently - returns false (and focuses the field) if
+  // the user backs out to fill it in first.
+  function confirmDescriptionOrFocus() {
+    if ((state.current.itemDescription || '').trim()) return true;
+    const proceed = confirm(
+      'No item description has been entered for this quote — it will show generic text ' +
+      '("Custom timber & joinery project") with no specific product details.\n\n' +
+      'Continue anyway?'
+    );
+    if (!proceed) {
+      el('itemDescription').focus();
+      return false;
+    }
+    return true;
+  }
+
   function printCurrentQuote() {
+    if (!confirmDescriptionOrFocus()) return;
     const q = state.current;
     if (!q.quoteNumber) {
       // Give the customer doc a real number without permanently consuming one if not saved yet.
@@ -1354,7 +1372,10 @@
       '',
       `Thank you for choosing PK Woodworking. This quote is valid until ${validUntil}.`,
       'Materials sourced via Pete & Meeks Handy Services (ABN 37 791 164 057)',
-    ].join('\n');
+      // mailto: bodies need CRLF line endings - several mail apps (Gmail's
+      // iOS app among them) collapse bare \n into spaces and render the
+      // whole thing as one run-on paragraph.
+    ].join('\r\n');
   }
 
   function buildQuoteEmailSubject(quote) {
@@ -1363,6 +1384,7 @@
   }
 
   function emailCurrentQuote() {
+    if (!confirmDescriptionOrFocus()) return;
     const quote = state.current;
     const contact = (quote.client.contact || '').trim();
     const to = /^\S+@\S+\.\S+$/.test(contact) ? contact : '';

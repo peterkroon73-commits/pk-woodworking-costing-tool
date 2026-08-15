@@ -55,7 +55,9 @@ static web app that runs entirely in the browser.
   — 1170 x 650 x 530mm — handmade treated pine, on castors") from that
   product's real size/feature data; edit freely, or type your own for a
   custom build. An optional "Note for customer" field adds one extra line
-  underneath (e.g. delivery timing) — left blank, it shows nothing.
+  underneath (e.g. delivery timing) — left blank, it shows nothing. If it's
+  empty when you Print or Email, you'll get a warning first rather than
+  silently sending generic placeholder text.
 - **Email Quote** — opens your device's email app with a pre-filled message
   to the client: the same single-line description and total as the printed
   quote, plus a clear "reply ACCEPT or DECLINE" section so their reply is

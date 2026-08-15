@@ -1116,6 +1116,7 @@
 
     el('btnSaveQuote').addEventListener('click', saveCurrentQuote);
     el('btnPrintQuote').addEventListener('click', printCurrentQuote);
+    el('btnEmailQuote').addEventListener('click', emailCurrentQuote);
     el('btnCopySummary').addEventListener('click', copyCostingSummary);
   }
 
@@ -1268,6 +1269,75 @@
     el('print-document').innerHTML = '';
     const filename = q.quoteNumber || (previewQuoteNumber() + '_DRAFT');
     printWithFilename(filename);
+  }
+
+  // Same customer-facing content as the printed quote (items + qty, total
+  // only - no internal cost/margin breakdown), as a plain-text email body
+  // with an explicit accept/decline section so the reply itself is the
+  // customer's confirmation.
+  function buildQuoteEmailBody(quote) {
+    const t = computeTotals(quote);
+    const quoteNo = quote.quoteNumber || previewQuoteNumber() + ' (draft)';
+    const validUntil = formatDateLong(addDays(quote.date, quote.validDays));
+
+    const itemLines = quote.bom
+      .filter(line => Number(line.qty) > 0)
+      .map(line => `  - ${line.name}: ${Number(line.qty)} ${line.unit}`);
+    if (Number(quote.labourHours) > 0) {
+      itemLines.push(`  - Labour & workmanship: ${Number(quote.labourHours)} hr`);
+    }
+
+    return [
+      `Hi ${quote.client.name || 'there'},`,
+      '',
+      `Please find your quote from PK Woodworking below.`,
+      '',
+      `Quote: ${quoteNo}`,
+      `Date: ${formatDateLong(quote.date)}`,
+      `Valid until: ${validUntil}`,
+      '',
+      'ITEMS',
+      itemLines.length ? itemLines.join('\n') : '  (no items)',
+      '',
+      `TOTAL: ${money(t.sellingPrice)}`,
+      '',
+      '----------------------------------------',
+      'ACCEPT OR DECLINE THIS QUOTE',
+      '----------------------------------------',
+      'Please reply to this email to let me know how you\'d like to proceed:',
+      '  - Reply "ACCEPT" to confirm you\'d like to go ahead.',
+      '  - Reply "DECLINE" if you don\'t wish to proceed.',
+      '',
+      'Any questions first? Just reply to this email.',
+      '',
+      `Thank you for choosing PK Woodworking. This quote is valid until ${validUntil}.`,
+      'Materials sourced via Pete & Meeks Handy Services (ABN 37 791 164 057)',
+    ].join('\n');
+  }
+
+  function buildQuoteEmailSubject(quote) {
+    const quoteNo = quote.quoteNumber || previewQuoteNumber() + ' (draft)';
+    return `Your PK Woodworking quote — ${quoteNo}`;
+  }
+
+  function emailCurrentQuote() {
+    const quote = state.current;
+    const contact = (quote.client.contact || '').trim();
+    const to = /^\S+@\S+\.\S+$/.test(contact) ? contact : '';
+
+    const subject = buildQuoteEmailSubject(quote);
+    const body = buildQuoteEmailBody(quote);
+    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    if (!to) {
+      alert('The Contact field doesn\'t have a valid email address, so your email app will open with no recipient — add the customer\'s email there before sending.');
+    }
+
+    const a = document.createElement('a');
+    a.href = mailto;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   // ---------------------------------------------------------------------

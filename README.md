@@ -46,6 +46,11 @@ static web app that runs entirely in the browser.
   labour, and the total price only) that prints or saves to PDF straight
   from the phone or desktop browser's print dialog. Internal costs and
   profit margin are deliberately excluded from this view.
+- **Email Quote** — opens your device's email app with a pre-filled message
+  to the client: the same customer-facing items/total as the printed quote,
+  plus a clear "reply ACCEPT or DECLINE" section so their reply is their
+  confirmation. Auto-fills the "To" field if the client's Contact field is a
+  valid email address; otherwise you just add it before hitting send.
 - **Saved quotes** — every saved quote syncs to your account and is
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.

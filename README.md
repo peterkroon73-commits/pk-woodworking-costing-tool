@@ -46,9 +46,13 @@ static web app that runs entirely in the browser.
   labour, and the total price only) that prints or saves to PDF straight
   from the phone or desktop browser's print dialog. Internal costs and
   profit margin are deliberately excluded from this view.
-- **Saved quotes** — every saved quote is stored on-device (localStorage) and
+- **Saved quotes** — every saved quote syncs to your account and is
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.
+- **Passcode-locked, synced across devices** — a passcode screen protects the
+  app and unlocks the same quotes, stock, and settings on any device you
+  enter it on (phone, laptop, wherever). See **Cross-device sync** below for
+  one-time setup.
 - **Stock tab** — log stock on hand for any material in your Price List
   (palings/offcuts by length and quantity, or simple countable items like
   castors and screws), with auto-calculated total pieces, total linear
@@ -74,18 +78,54 @@ static web app that runs entirely in the browser.
 
 ## How data is stored
 
-This is a static, offline-capable web app with **no server and no
-database**. All settings and quotes are saved in the browser's
-`localStorage` on the device you're using. That means:
+This is a static web app — no custom server, but it does use
+[Supabase](https://supabase.com) as a small cloud database so your data
+follows you across devices.
 
-- Quotes, stock entries, and the waste log persist across visits/sessions on
-  the *same device and browser* (not just in-session).
-- None of this data syncs between devices (e.g. phone and laptop) on its own.
-- Use **Settings → Backup → Export backup (JSON)** regularly, and especially
-  before clearing browser data, switching phones, or reinstalling the
-  browser. **Import backup** restores everything (settings, quotes, stock,
-  and the waste log) from a previously exported file — useful for moving to
-  a new device too.
+- Settings, quotes, stock, and the waste log sync to your Supabase project
+  automatically every time you save something, and pull down fresh whenever
+  you open the app.
+- A copy is also kept in the browser's `localStorage` on each device, so the
+  app still works (read-only-ish, until the connection comes back) if you
+  briefly lose signal — changes made while offline sync as soon as you're
+  back online and reopen the app.
+- A single passcode screen protects everything: the passcode doubles as the
+  password for one Supabase Auth account, and database rules (Row Level
+  Security) only let that signed-in account read or write your data. See
+  **Cross-device sync setup** below to wire this up the first time.
+- **Settings → Backup → Export backup (JSON)** is still there as a manual,
+  offline copy — handy before clearing browser data, or if you ever want
+  your data outside the app. It's no longer how you move data between
+  devices day-to-day, since sync handles that automatically.
+
+## Cross-device sync setup
+
+The app is already pointed at a Supabase project (URL and anon/publishable
+key are baked into `js/app.js` — see `SUPABASE_URL` / `SUPABASE_ANON_KEY`
+near the top of the "Cloud sync" section). Two one-time steps are needed in
+the [Supabase dashboard](https://supabase.com/dashboard) before the passcode
+screen will work:
+
+1. **Create the database tables.** Open your project → **SQL Editor** → New
+   query → paste the entire contents of `supabase/schema.sql` → **Run**.
+   This creates the `app_settings`, `quotes`, `stock_entries`, and
+   `waste_entries` tables and locks each row to your account via Row Level
+   Security. Safe to re-run if needed.
+2. **Turn off "Confirm email".** Open your project → **Authentication →
+   Providers → Email** → turn off **Confirm email**. Since this is a
+   single-user tool signing in with a passcode (not a real inbox-based
+   signup flow), this lets the very first "Create your passcode" step work
+   immediately instead of waiting on a confirmation link.
+
+After that, open the app, tap **First time on this device? Set up your
+passcode**, and choose a passcode (6+ characters). On every other device,
+open the app and enter the same passcode under **Enter your passcode** to
+unlock the same data. Use **Settings → Sync → Lock app** to sign out of a
+device (e.g. before handing off a shared computer).
+
+If you ever forget the passcode, there's no in-app reset — change the
+account's password from the Supabase dashboard (**Authentication → Users**)
+instead.
 
 ## Running it
 
@@ -119,9 +159,11 @@ as long as both are on the same network.
 ## Project structure
 
 ```
-index.html            App shell: quote form, saved quotes, settings
+index.html            App shell: passcode screen, quote form, saved quotes, settings
 css/styles.css         Styling, responsive layout, print stylesheet
-js/app.js               All app logic (state, calculations, persistence)
+js/app.js               All app logic (state, calculations, cloud sync, persistence)
+js/vendor/supabase.js   Vendored @supabase/supabase-js client (no CDN dependency)
+supabase/schema.sql     One-time database setup - run in the Supabase SQL Editor
 .github/workflows/      GitHub Pages deploy workflow
 ```
 
@@ -133,4 +175,5 @@ Open the **Settings** tab to change:
 - The material price list (add, edit, or remove materials)
 - The quote number prefix and next quote number
 
-These are stored per-device alongside your quotes.
+These sync to your account alongside your quotes, so they're the same on
+every device you unlock the app with your passcode on.

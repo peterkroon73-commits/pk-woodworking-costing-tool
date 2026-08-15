@@ -247,6 +247,7 @@
 
   function saveSettings(settings) {
     localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
+    pushSettingsToCloud(settings);
   }
 
   function loadQuotes() {
@@ -261,6 +262,7 @@
 
   function saveQuotes(quotes) {
     localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
+    pushQuotesToCloud(quotes);
   }
 
   function loadStock() {
@@ -275,6 +277,7 @@
 
   function saveStock(stock) {
     localStorage.setItem(STORAGE.stock, JSON.stringify(stock));
+    pushStockToCloud(stock);
   }
 
   function loadWaste() {
@@ -289,6 +292,7 @@
 
   function saveWaste(waste) {
     localStorage.setItem(STORAGE.waste, JSON.stringify(waste));
+    pushWasteToCloud(waste);
   }
 
   function saveDraft() {
@@ -303,6 +307,242 @@
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Cloud sync (Supabase)
+  //
+  // Single-user tool, so there's exactly one Supabase Auth account. The
+  // passcode screen signs into that account (passcode = password) instead
+  // of exposing a full "create account" flow. Row Level Security on every
+  // table restricts rows to that account's auth.uid(), so the passcode is
+  // a real security boundary, not just a UI gate - the anon key alone
+  // grants no access.
+  //
+  // Sync model: every local save pushes straight to Supabase (fire and
+  // forget, with a visible status message on failure). Every app open
+  // pulls the latest cloud data down. The only case that needs a decision
+  // is the first time THIS device talks to the cloud and finds data that
+  // doesn't match what's stored locally - see reconcileWithCloud().
+  // ---------------------------------------------------------------------
+
+  const SUPABASE_URL = 'https://pqjoypxipbjechumogrb.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_SzP7POOf-wRu3kmU95LvHQ__IV-SkyX';
+  const SYNC_ACCOUNT_EMAIL = 'peterkroon73@gmail.com';
+  const SYNC_DEVICE_FLAG = 'pkw_cloud_reconciled_v1';
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true },
+  });
+
+  function setSyncStatus(text, isError) {
+    const el2 = document.getElementById('syncStatus');
+    if (!el2) return;
+    el2.textContent = text;
+    el2.style.color = isError ? '#b3392c' : '';
+  }
+
+  function rowsFromArray(list, userId) {
+    return (list || []).map(item => ({ id: item.id, user_id: userId, data: item, updated_at: new Date().toISOString() }));
+  }
+
+  // Replaces all of `table`'s rows for this user with exactly `list`
+  // (upserts everything currently present, deletes anything that isn't).
+  async function syncArrayTable(table, list, userId) {
+    const { data: existing, error: fetchErr } = await sb.from(table).select('id').eq('user_id', userId);
+    if (fetchErr) throw fetchErr;
+    const keepIds = new Set((list || []).map(item => item.id));
+    const idsToDelete = (existing || []).map(r => r.id).filter(id => !keepIds.has(id));
+    if (idsToDelete.length) {
+      const { error: delErr } = await sb.from(table).delete().eq('user_id', userId).in('id', idsToDelete);
+      if (delErr) throw delErr;
+    }
+    const rows = rowsFromArray(list, userId);
+    if (rows.length) {
+      const { error: upsertErr } = await sb.from(table).upsert(rows, { onConflict: 'id' });
+      if (upsertErr) throw upsertErr;
+    }
+  }
+
+  // Cached after a successful sign-in so every save doesn't need its own
+  // round trip to verify the session before writing.
+  let currentUserId = null;
+
+  async function pushSettingsToCloud(settings) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      const { error } = await sb.from('app_settings').upsert(
+        { user_id: userId, data: settings, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+      if (error) throw error;
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (settings)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
+  async function pushQuotesToCloud(quotes) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      await syncArrayTable('quotes', quotes, userId);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (quotes)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
+  async function pushStockToCloud(stock) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      await syncArrayTable('stock_entries', stock, userId);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (stock)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
+  async function pushWasteToCloud(waste) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      await syncArrayTable('waste_entries', waste, userId);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (waste)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
+  async function pushAllToCloud() {
+    await pushSettingsToCloud(state.settings);
+    await pushQuotesToCloud(state.quotes);
+    await pushStockToCloud(state.stock);
+    await pushWasteToCloud(state.waste);
+  }
+
+  // Fetches everything currently in the cloud for this user. Returns null
+  // fields/empty arrays if nothing's there yet (brand new account).
+  async function fetchCloudSnapshot(userId) {
+    const [settingsRes, quotesRes, stockRes, wasteRes] = await Promise.all([
+      sb.from('app_settings').select('data').eq('user_id', userId).maybeSingle(),
+      sb.from('quotes').select('data').eq('user_id', userId),
+      sb.from('stock_entries').select('data').eq('user_id', userId),
+      sb.from('waste_entries').select('data').eq('user_id', userId),
+    ]);
+    if (settingsRes.error) throw settingsRes.error;
+    if (quotesRes.error) throw quotesRes.error;
+    if (stockRes.error) throw stockRes.error;
+    if (wasteRes.error) throw wasteRes.error;
+    return {
+      settings: settingsRes.data ? settingsRes.data.data : null,
+      quotes: (quotesRes.data || []).map(r => r.data),
+      stock: (stockRes.data || []).map(r => r.data),
+      waste: (wasteRes.data || []).map(r => r.data),
+    };
+  }
+
+  function cloudSnapshotIsEmpty(snapshot) {
+    return !snapshot.settings && snapshot.quotes.length === 0 && snapshot.stock.length === 0 && snapshot.waste.length === 0;
+  }
+
+  function applyCloudSnapshot(snapshot) {
+    state.settings = migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), snapshot.settings || {}));
+    state.quotes = snapshot.quotes;
+    state.stock = snapshot.stock;
+    state.waste = snapshot.waste;
+    materialsDraft = structuredClone(state.settings.materials);
+    localStorage.setItem(STORAGE.settings, JSON.stringify(state.settings));
+    localStorage.setItem(STORAGE.quotes, JSON.stringify(state.quotes));
+    localStorage.setItem(STORAGE.stock, JSON.stringify(state.stock));
+    localStorage.setItem(STORAGE.waste, JSON.stringify(state.waste));
+  }
+
+  function rerenderEverything() {
+    renderSettingsForm();
+    renderSavedList();
+    renderQuoteForm();
+    renderStockTable();
+    renderWasteTable();
+    if (document.getElementById('tab-documents').classList.contains('active')) {
+      renderDocumentsPreview();
+    }
+  }
+
+  // Runs once per device: figures out whether this device's local data and
+  // the cloud's data are the same account's data seen from two angles, or
+  // a genuine fork that needs a decision. After this, every subsequent
+  // open just silently pulls the cloud (each local save already pushes
+  // immediately, so the cloud is expected to be current).
+  async function reconcileWithCloud(userId) {
+    try {
+      const cloud = await fetchCloudSnapshot(userId);
+
+      if (cloudSnapshotIsEmpty(cloud)) {
+        // Brand new account (or first device to ever sync): this device's
+        // local data becomes the starting point in the cloud. Nothing to
+        // lose either way.
+        await pushAllToCloud();
+        localStorage.setItem(SYNC_DEVICE_FLAG, '1');
+        setSyncStatus('Synced just now.');
+        return;
+      }
+
+      const localSnapshot = JSON.stringify({ settings: state.settings, quotes: state.quotes, stock: state.stock, waste: state.waste });
+      const cloudSnapshot = JSON.stringify({
+        settings: migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), cloud.settings || {})),
+        quotes: cloud.quotes,
+        stock: cloud.stock,
+        waste: cloud.waste,
+      });
+
+      if (localSnapshot === cloudSnapshot) {
+        localStorage.setItem(SYNC_DEVICE_FLAG, '1');
+        setSyncStatus('Synced just now.');
+        return;
+      }
+
+      const useCloud = confirm(
+        "This device has local data that's different from what's already in your account " +
+        '(e.g. quotes or stock added on this device before it was ever synced).\n\n' +
+        'OK = use your CLOUD data (replaces what\'s on this device)\n' +
+        "Cancel = keep THIS DEVICE's data (overwrites the cloud with it)\n\n" +
+        "Tip: if you're not sure, Cancel first and use Settings → Export backup to save a copy of this device's data before deciding."
+      );
+
+      if (useCloud) {
+        applyCloudSnapshot(cloud);
+        rerenderEverything();
+      } else {
+        await pushAllToCloud();
+      }
+      localStorage.setItem(SYNC_DEVICE_FLAG, '1');
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud reconcile failed', e);
+      setSyncStatus('Could not reach your cloud data — showing what was last saved on this device. Sync will retry next time you open the app.', true);
+    }
+  }
+
+  // Every open after the first: cloud is expected to be current (this
+  // device's own last change already pushed), so just adopt it. This is
+  // what makes changes made on OTHER devices show up here.
+  async function pullLatestFromCloud(userId) {
+    try {
+      const cloud = await fetchCloudSnapshot(userId);
+      if (cloudSnapshotIsEmpty(cloud)) return;
+      applyCloudSnapshot(cloud);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud pull failed', e);
+      setSyncStatus('Could not reach your cloud data — showing what was last saved on this device.', true);
     }
   }
 
@@ -1197,6 +1437,8 @@
     el('btnExport').addEventListener('click', exportBackup);
     el('btnImport').addEventListener('click', () => el('importFile').click());
     el('importFile').addEventListener('change', importBackup);
+
+    el('btnLockApp').addEventListener('click', lockApp);
   }
 
   function exportBackup() {
@@ -1872,7 +2114,7 @@
   // Init
   // ---------------------------------------------------------------------
 
-  function init() {
+  function initApp() {
     const draft = loadDraft();
     state.current = draft || blankQuote();
     state.current.cutList = state.current.cutList || [];
@@ -1899,5 +2141,140 @@
     renderWasteTable();
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // ---------------------------------------------------------------------
+  // Lock screen / passcode auth
+  // ---------------------------------------------------------------------
+
+  let appStarted = false;
+
+  function showApp() {
+    el('lockScreen').hidden = true;
+    el('appHeader').hidden = false;
+    el('appMain').hidden = false;
+  }
+
+  function showLockScreen(mode) {
+    el('lockScreen').hidden = false;
+    el('appHeader').hidden = true;
+    el('appMain').hidden = true;
+    el('unlockForm').hidden = mode === 'setup';
+    el('setupForm').hidden = mode !== 'setup';
+  }
+
+  async function onAuthenticated(userId) {
+    currentUserId = userId;
+    showApp();
+    if (!appStarted) {
+      appStarted = true;
+      initApp();
+    }
+    setSyncStatus('Syncing…');
+    if (!localStorage.getItem(SYNC_DEVICE_FLAG)) {
+      await reconcileWithCloud(userId);
+    } else {
+      await pullLatestFromCloud(userId);
+    }
+    rerenderEverything();
+  }
+
+  function isNetworkError(err) {
+    return !!err && /fetch|network|failed to fetch/i.test(err.message || '');
+  }
+
+  function bindLockScreenEvents() {
+    el('btnShowSetup').addEventListener('click', () => showLockScreen('setup'));
+    el('btnShowUnlock').addEventListener('click', () => showLockScreen('unlock'));
+
+    el('unlockForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const passcode = el('unlockPasscode').value;
+      const statusEl = el('unlockStatus');
+      const btn = el('btnUnlock');
+      if (!passcode) return;
+      btn.disabled = true;
+      statusEl.textContent = 'Checking…';
+      statusEl.style.color = '';
+      try {
+        const { data, error } = await sb.auth.signInWithPassword({ email: SYNC_ACCOUNT_EMAIL, password: passcode });
+        if (error) throw error;
+        statusEl.textContent = '';
+        el('unlockPasscode').value = '';
+        await onAuthenticated(data.user.id);
+      } catch (err) {
+        statusEl.style.color = '#b3392c';
+        statusEl.textContent = isNetworkError(err)
+          ? 'Could not reach the sync server — check your internet connection and try again.'
+          : 'Incorrect passcode, or this device has never been set up — use "First time on this device?" below if you haven\'t created a passcode yet.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    el('setupForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const passcode = el('setupPasscode').value;
+      const confirmPasscode = el('setupPasscodeConfirm').value;
+      const statusEl = el('setupStatus');
+      const btn = el('btnSetupPasscode');
+      statusEl.style.color = '';
+
+      if (passcode.length < 6) {
+        statusEl.style.color = '#b3392c';
+        statusEl.textContent = 'Passcode must be at least 6 characters.';
+        return;
+      }
+      if (passcode !== confirmPasscode) {
+        statusEl.style.color = '#b3392c';
+        statusEl.textContent = "Passcodes don't match.";
+        return;
+      }
+
+      btn.disabled = true;
+      statusEl.textContent = 'Setting up…';
+      try {
+        const { data, error } = await sb.auth.signUp({ email: SYNC_ACCOUNT_EMAIL, password: passcode });
+        if (error) throw error;
+        if (!data.session) {
+          // Supabase project still has "Confirm email" turned on, so no
+          // session comes back until that link is clicked.
+          statusEl.style.color = '';
+          statusEl.textContent = 'Almost there — check ' + SYNC_ACCOUNT_EMAIL + ' and click the confirmation link, then come back and enter your passcode to unlock.';
+          return;
+        }
+        statusEl.textContent = '';
+        el('setupPasscode').value = '';
+        el('setupPasscodeConfirm').value = '';
+        await onAuthenticated(data.user.id);
+      } catch (err) {
+        statusEl.style.color = '#b3392c';
+        if (isNetworkError(err)) {
+          statusEl.textContent = 'Could not reach the sync server — check your internet connection and try again.';
+        } else if (err && err.message === 'User already registered') {
+          statusEl.textContent = 'A passcode is already set up for this account — use "Already set up?" below and enter it.';
+        } else {
+          statusEl.textContent = 'Could not set up passcode: ' + (err && err.message ? err.message : 'unknown error');
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function lockApp() {
+    currentUserId = null;
+    await sb.auth.signOut();
+    location.reload();
+  }
+
+  async function boot() {
+    bindLockScreenEvents();
+    const { data } = await sb.auth.getSession();
+    if (data.session) {
+      await onAuthenticated(data.session.user.id);
+    } else {
+      showLockScreen('unlock');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
 })();

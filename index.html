@@ -6,10 +6,46 @@
 <meta name="theme-color" content="#3c2a1e" />
 <title>PK Woodworking — Quote &amp; Costing Tool</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='16' fill='%233c2a1e'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23c8a578' font-family='Georgia,serif'%3EW%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="css/styles.css?v=14" />
+<link rel="stylesheet" href="css/styles.css?v=15" />
 </head>
 <body>
-<header class="app-header">
+
+<!-- ===================== LOCK SCREEN ===================== -->
+<div id="lockScreen" class="lock-screen">
+  <div class="lock-card">
+    <h1>PK Woodworking</h1>
+    <p class="subtitle">Quote &amp; Costing Tool</p>
+
+    <form id="unlockForm" class="lock-form">
+      <p class="lock-heading">Enter your passcode</p>
+      <div class="field">
+        <label for="unlockPasscode">Passcode</label>
+        <input type="password" id="unlockPasscode" autocomplete="current-password" inputmode="text" />
+      </div>
+      <button type="submit" id="btnUnlock" class="btn btn-primary">Unlock</button>
+      <p class="lock-status" id="unlockStatus" aria-live="polite"></p>
+      <button type="button" id="btnShowSetup" class="btn-link">First time on this device? Set up your passcode</button>
+    </form>
+
+    <form id="setupForm" class="lock-form" hidden>
+      <p class="lock-heading">Create your passcode</p>
+      <p class="hint">This passcode protects your data and unlocks the app on any device. Use at least 6 characters. Choose something you can remember — there's no reset link, only your Supabase dashboard.</p>
+      <div class="field">
+        <label for="setupPasscode">New passcode</label>
+        <input type="password" id="setupPasscode" autocomplete="new-password" inputmode="text" />
+      </div>
+      <div class="field">
+        <label for="setupPasscodeConfirm">Confirm passcode</label>
+        <input type="password" id="setupPasscodeConfirm" autocomplete="new-password" inputmode="text" />
+      </div>
+      <button type="submit" id="btnSetupPasscode" class="btn btn-primary">Create passcode &amp; continue</button>
+      <p class="lock-status" id="setupStatus" aria-live="polite"></p>
+      <button type="button" id="btnShowUnlock" class="btn-link">Already set up? Enter your passcode instead</button>
+    </form>
+  </div>
+</div>
+
+<header class="app-header" id="appHeader" hidden>
   <div class="header-row">
     <h1>PK Woodworking</h1>
     <span class="subtitle">Quote &amp; Costing Tool</span>
@@ -23,7 +59,7 @@
   </nav>
 </header>
 
-<main>
+<main id="appMain" hidden>
 
   <!-- ===================== QUOTE TAB ===================== -->
   <section id="tab-quote" class="tab-panel active" role="tabpanel">
@@ -345,8 +381,17 @@
     </div>
 
     <div class="card">
+      <h2>Sync</h2>
+      <p class="hint">Your data syncs automatically to your account and shows on any device you unlock the app with your passcode on.</p>
+      <p class="save-status" id="syncStatus" aria-live="polite">Checking sync status…</p>
+      <div class="action-row">
+        <button type="button" id="btnLockApp" class="btn btn-ghost">Lock app</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Backup</h2>
-      <p class="hint">Quotes are stored on this device only. Export a backup regularly, especially before clearing browser data or switching phones.</p>
+      <p class="hint">Your data syncs to the cloud automatically, so this is just an extra offline copy — handy before clearing browser data, or if you ever want data outside the app.</p>
       <div class="action-row">
         <button type="button" id="btnExport" class="btn btn-secondary">Export backup (JSON)</button>
         <button type="button" id="btnImport" class="btn btn-ghost">Import backup</button>
@@ -363,6 +408,7 @@
 <!-- Printable workshop build pack (hidden on screen, shown only when printing) -->
 <div id="print-document" class="print-only"></div>
 
-<script src="js/app.js?v=14"></script>
+<script src="js/vendor/supabase.js?v=2.112.3"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>

@@ -562,3 +562,71 @@ input[readonly] {
 @media (min-width: 640px) {
   .quote-meta { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ----------------------------------------------------------------- */
+/* Lock screen                                                       */
+/* ----------------------------------------------------------------- */
+
+.lock-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wood-dark);
+  padding: 1.5rem;
+}
+
+.lock-screen[hidden] {
+  display: none;
+}
+
+.lock-card {
+  background: var(--cream);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.lock-card h1 {
+  margin: 0 0 0.1rem;
+  color: var(--wood-dark);
+  font-size: 1.4rem;
+}
+
+.lock-card .subtitle {
+  color: var(--muted);
+  display: block;
+  margin-bottom: 1.25rem;
+}
+
+.lock-form {
+  text-align: left;
+}
+
+.lock-heading {
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--wood-dark);
+}
+
+.lock-form .field {
+  margin-bottom: 0.9rem;
+}
+
+.lock-form .btn {
+  width: 100%;
+}
+
+.lock-status {
+  min-height: 1.2em;
+  font-size: 0.88rem;
+  margin: 0.6rem 0 0;
+}
+
+.lock-form .btn-link {
+  display: block;
+  margin: 0.9rem auto 0;
+  text-align: center;
+}

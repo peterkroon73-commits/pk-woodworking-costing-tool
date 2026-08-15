@@ -1209,10 +1209,12 @@
     const printBtn = el('btnPrintDocument');
 
     if (!templateId) {
-      container.innerHTML = '';
+      container.innerHTML = '<p class="hint">Select a product above to generate the cut list, shopping list, and quality checklist.</p>';
       printBtn.disabled = true;
+      printBtn.title = 'Select a product first';
       return;
     }
+    printBtn.title = '';
 
     const template = findCutListTemplate(templateId);
     const result = packCutList(template.rows);
@@ -1548,7 +1550,10 @@
     document.querySelectorAll('.tab-panel').forEach(p => {
       p.classList.toggle('active', p.id === 'tab-' + name);
     });
-    if (name === 'documents') populateAcceptedQuoteSelect();
+    if (name === 'documents') {
+      populateAcceptedQuoteSelect();
+      renderDocumentsPreview();
+    }
   }
 
   function bindTabs() {

@@ -49,20 +49,19 @@ static web app that runs entirely in the browser.
   Description** below for where that line comes from. Internal costs and
   profit margin are deliberately excluded from this view.
 - **Customer Quote Description** — the Quote tab has an "Item description"
-  field that's what actually prints on the customer quote, instead of the
-  itemised Bill of Materials below it. Loading a Cut List template
-  auto-fills it (e.g. "Standard Raised Planter — 1170 x 650 x 530mm —
-  handmade treated pine, on castors") from that product's real size/feature
-  data; edit freely, or type your own for a custom build. An optional "Note
-  for customer" field adds one extra line underneath (e.g. delivery timing)
-  — left blank, it shows nothing.
+  field that's what the customer actually sees — on the printed quote and
+  in Email Quote — instead of the itemised Bill of Materials below it.
+  Loading a Cut List template auto-fills it (e.g. "Standard Raised Planter
+  — 1170 x 650 x 530mm — handmade treated pine, on castors") from that
+  product's real size/feature data; edit freely, or type your own for a
+  custom build. An optional "Note for customer" field adds one extra line
+  underneath (e.g. delivery timing) — left blank, it shows nothing.
 - **Email Quote** — opens your device's email app with a pre-filled message
-  to the client: an itemised materials/labour list (name + qty, no cost
-  breakdown) plus a clear "reply ACCEPT or DECLINE" section so their reply
-  is their confirmation. Auto-fills the "To" field if the client's Contact
+  to the client: the same single-line description and total as the printed
+  quote, plus a clear "reply ACCEPT or DECLINE" section so their reply is
+  their confirmation. Auto-fills the "To" field if the client's Contact
   field is a valid email address; otherwise you just add it before hitting
-  send. (Doesn't yet use the simplified single-line description the printed
-  quote uses — still itemised, for now.)
+  send.
 - **Saved quotes** — every saved quote syncs to your account and is
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.

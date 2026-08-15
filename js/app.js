@@ -1328,13 +1328,6 @@
     const quoteNo = quote.quoteNumber || previewQuoteNumber() + ' (draft)';
     const validUntil = formatDateLong(addDays(quote.date, quote.validDays));
 
-    const itemLines = quote.bom
-      .filter(line => Number(line.qty) > 0)
-      .map(line => `  - ${line.name}: ${Number(line.qty)} ${line.unit}`);
-    if (Number(quote.labourHours) > 0) {
-      itemLines.push(`  - Labour & workmanship: ${Number(quote.labourHours)} hr`);
-    }
-
     return [
       `Hi ${quote.client.name || 'there'},`,
       '',
@@ -1344,8 +1337,9 @@
       `Date: ${formatDateLong(quote.date)}`,
       `Valid until: ${validUntil}`,
       '',
-      'ITEMS',
-      itemLines.length ? itemLines.join('\n') : '  (no items)',
+      'DESCRIPTION',
+      resolveItemDescription(quote),
+      ...(quote.customerNote ? ['', quote.customerNote] : []),
       '',
       `TOTAL: ${money(t.sellingPrice)}`,
       '',

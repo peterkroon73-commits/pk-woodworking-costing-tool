@@ -1183,6 +1183,26 @@
   // Documents tab
   // ---------------------------------------------------------------------
 
+  function getDocumentsLinkedQuote() {
+    const select = el('documentsLinkedQuote');
+    if (!select || !select.value) return null;
+    return state.quotes.find(q => q.id === select.value) || null;
+  }
+
+  function getShoppingListRows(template, palingsRequired) {
+    const castorCount = getTemplateCastorCount(template);
+    const rows = [{ name: 'Palings', qty: String(palingsRequired), note: '' }];
+    if (castorCount > 0) rows.push({ name: 'Castors', qty: String(castorCount), note: '' });
+    rows.push(
+      { name: 'Screws', qty: '', note: '' },
+      { name: 'Brads', qty: '', note: '' },
+      { name: 'Glue', qty: '', note: 'Use workshop stock first' },
+      { name: 'Weed mat', qty: '', note: 'Use workshop stock first' },
+      { name: 'Sandpaper', qty: '', note: 'Use workshop stock first' }
+    );
+    return rows;
+  }
+
   function renderDocumentsPreview() {
     const templateId = el('documentsTemplate').value;
     const container = el('documentsPreview');
@@ -1203,7 +1223,19 @@
       ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
       : '';
 
+    const linkedQuote = getDocumentsLinkedQuote();
+    const jobHeaderHtml = linkedQuote
+      ? `<p class="doc-job-header-preview">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
+      : '';
+
+    const shoppingRowsHtml = getShoppingListRows(template, result.palingsRequired)
+      .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
+      .join('');
+
+    const qualityItemsHtml = QUALITY_CHECKLIST_ITEMS.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+
     let html = `
+      ${jobHeaderHtml}
       <div class="table-scroll">
         <table class="bom-table">
           <thead><tr><th>Part</th><th>Length</th><th>Qty</th></tr></thead>
@@ -1220,6 +1252,19 @@
     } else if (template.note) {
       html += `<div class="template-notice info">${escapeHtml(template.note)}</div>`;
     }
+
+    html += `
+      <h3 class="doc-preview-subhead">Shopping list</h3>
+      <div class="table-scroll">
+        <table class="bom-table">
+          <thead><tr><th>Item</th><th>Qty</th><th>Note</th></tr></thead>
+          <tbody>${shoppingRowsHtml}</tbody>
+        </table>
+      </div>
+      <h3 class="doc-preview-subhead">Quality inspection</h3>
+      <ul class="doc-preview-checklist">${qualityItemsHtml}</ul>
+      <p class="hint">Plus a blank Build Record page and an "Approved for sale" sign-off — these print but aren't shown in this preview.</p>
+    `;
 
     container.innerHTML = html;
     printBtn.disabled = false;
@@ -1239,24 +1284,12 @@
       : '';
     const warningHtml = template.warning ? `<p class="pq-warning">⚠ ${escapeHtml(template.warning)}</p>` : '';
 
-    const linkedQuote = state.quotes.find(q => q.id === el('documentsLinkedQuote').value);
+    const linkedQuote = getDocumentsLinkedQuote();
     const jobHeaderHtml = linkedQuote
       ? `<p class="doc-job-header">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
       : '';
 
-    const castorCount = getTemplateCastorCount(template);
-    const shoppingRows = [
-      { name: 'Palings', qty: String(result.palingsRequired), note: '' },
-    ];
-    if (castorCount > 0) shoppingRows.push({ name: 'Castors', qty: String(castorCount), note: '' });
-    shoppingRows.push(
-      { name: 'Screws', qty: '', note: '' },
-      { name: 'Brads', qty: '', note: '' },
-      { name: 'Glue', qty: '', note: 'Use workshop stock first' },
-      { name: 'Weed mat', qty: '', note: 'Use workshop stock first' },
-      { name: 'Sandpaper', qty: '', note: 'Use workshop stock first' }
-    );
-    const shoppingRowsHtml = shoppingRows
+    const shoppingRowsHtml = getShoppingListRows(template, result.palingsRequired)
       .map(r => `<tr><td class="doc-checkbox"></td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
       .join('');
 
@@ -1347,6 +1380,7 @@
 
   function bindDocumentsEvents() {
     el('documentsTemplate').addEventListener('change', renderDocumentsPreview);
+    el('documentsLinkedQuote').addEventListener('change', renderDocumentsPreview);
     el('btnPrintDocument').addEventListener('click', printDocument);
   }
 

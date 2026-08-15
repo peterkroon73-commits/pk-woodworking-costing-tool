@@ -382,6 +382,29 @@ input[readonly] {
   color: var(--accent);
 }
 
+.doc-job-header-preview {
+  font-weight: 700;
+  color: var(--wood-dark);
+  margin: 0 0 0.75rem;
+}
+
+.doc-preview-subhead {
+  font-size: 0.95rem;
+  color: var(--wood-dark);
+  margin: 1.25rem 0 0.5rem;
+}
+
+.doc-preview-checklist {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.doc-preview-checklist li {
+  padding: 0.15rem 0;
+}
+
 .qty-locked {
   display: flex;
   flex-direction: column;

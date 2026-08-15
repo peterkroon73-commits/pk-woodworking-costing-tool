@@ -41,9 +41,16 @@ static web app that runs entirely in the browser.
 - **Saved quotes** — every saved quote is stored on-device (localStorage) and
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.
+- **Stock tab** — log paling/offcut stock on hand (length, quantity, date
+  added) with auto-calculated total pieces, total linear metres, estimated
+  value, and days in stock for each entry. **What Can I Build?** checks a
+  product template (or a pasted cut list) against current stock — using the
+  same bin-packing engine as the Cut List — to show what's covered and how
+  many fresh palings you'd need to buy for the rest. A **Waste Log** tracks
+  offcuts that ended up as scrap, with a running dollar total.
 - **Works on mobile** — responsive layout, large touch targets, and a
   sticky tabbed header for quick access to Quote / Saved Quotes / Documents /
-  Settings.
+  Stock / Settings.
 
 ## How data is stored
 
@@ -51,14 +58,14 @@ This is a static, offline-capable web app with **no server and no
 database**. All settings and quotes are saved in the browser's
 `localStorage` on the device you're using. That means:
 
-- Quotes persist across visits/sessions on the *same device and browser*
-  (not just in-session).
-- Quotes do **not** sync between devices (e.g. phone and laptop) on their
-  own.
+- Quotes, stock entries, and the waste log persist across visits/sessions on
+  the *same device and browser* (not just in-session).
+- None of this data syncs between devices (e.g. phone and laptop) on its own.
 - Use **Settings → Backup → Export backup (JSON)** regularly, and especially
   before clearing browser data, switching phones, or reinstalling the
-  browser. **Import backup** restores everything (settings + quotes) from
-  a previously exported file — useful for moving to a new device too.
+  browser. **Import backup** restores everything (settings, quotes, stock,
+  and the waste log) from a previously exported file — useful for moving to
+  a new device too.
 
 ## Running it
 

@@ -5,6 +5,8 @@
     settings: 'pkw_settings_v1',
     quotes: 'pkw_quotes_v1',
     draft: 'pkw_draft_v1',
+    stock: 'pkw_stock_v1',
+    waste: 'pkw_waste_v1',
   };
 
   const GLUE_PRICE_PER_ML = 0.0251; // $93 / 3700mL, rounded to 4dp
@@ -162,6 +164,15 @@
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  // Browsers use document.title as the suggested filename in the print/Save-as-PDF
+  // dialog, so swap it in briefly around window.print() instead of the generic app title.
+  function printWithFilename(filename) {
+    const originalTitle = document.title;
+    document.title = filename;
+    window.print();
+    document.title = originalTitle;
+  }
+
   // ---------------------------------------------------------------------
   // Persistence
   // ---------------------------------------------------------------------
@@ -196,6 +207,34 @@
     localStorage.setItem(STORAGE.quotes, JSON.stringify(quotes));
   }
 
+  function loadStock() {
+    try {
+      const raw = localStorage.getItem(STORAGE.stock);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Failed to load stock', e);
+      return [];
+    }
+  }
+
+  function saveStock(stock) {
+    localStorage.setItem(STORAGE.stock, JSON.stringify(stock));
+  }
+
+  function loadWaste() {
+    try {
+      const raw = localStorage.getItem(STORAGE.waste);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Failed to load waste log', e);
+      return [];
+    }
+  }
+
+  function saveWaste(waste) {
+    localStorage.setItem(STORAGE.waste, JSON.stringify(waste));
+  }
+
   function saveDraft() {
     try {
       localStorage.setItem(STORAGE.draft, JSON.stringify(state.current));
@@ -218,6 +257,8 @@
   const state = {
     settings: loadSettings(),
     quotes: loadQuotes(),
+    stock: loadStock(),
+    waste: loadWaste(),
     current: null,       // quote currently being edited
     priceOverridden: false, // has user manually edited selling price for this quote?
   };
@@ -339,6 +380,93 @@
     const totalOffcut = offcuts.reduce((a, b) => a + b, 0);
 
     return { palingsRequired: bins.length, offcuts, totalOffcut, warnings };
+  }
+
+  function getPalingUnitPrice() {
+    const material = state.settings.materials.find(m => m.id === 'paling');
+    return material ? Number(material.unitPrice) || 0 : 0;
+  }
+
+  // Values a length of stock/waste as a fraction of a full 1800mm paling's price.
+  function stockPieceValue(length, qty) {
+    return (Number(length) / CUT_STOCK_LENGTH) * getPalingUnitPrice() * (Number(qty) || 0);
+  }
+
+  function daysInStock(dateAddedISO) {
+    const added = new Date(dateAddedISO + 'T00:00:00');
+    const today = new Date(todayISO() + 'T00:00:00');
+    return Math.max(0, Math.round((today - added) / 86400000));
+  }
+
+  // Matches a required cut list against the actual stock on hand (fixed
+  // number of fixed-length sticks, unlike packCutList's unlimited fresh
+  // 1800mm supply). Each required piece goes to the stock piece it fits
+  // most snugly (best-fit decreasing), so small offcuts get used up before
+  // reaching for full-length stock. Whatever doesn't fit is re-packed with
+  // packCutList to say how many fresh palings would need buying.
+  function checkStockAgainstCutList(rows, stockEntries) {
+    const perRow = (rows || []).map(row => ({
+      name: row.name || 'Unnamed part',
+      length: Number(row.length) || 0,
+      qtyRequired: Math.max(0, Math.floor(Number(row.qty) || 0)),
+      qtyCovered: 0,
+    }));
+
+    const pieces = [];
+    perRow.forEach((row, rowIdx) => {
+      if (row.length <= 0 || row.qtyRequired <= 0) return;
+      for (let i = 0; i < row.qtyRequired; i++) pieces.push({ length: row.length, rowIdx });
+    });
+    pieces.sort((a, b) => b.length - a.length);
+
+    const bins = [];
+    (stockEntries || []).forEach(entry => {
+      const length = Number(entry.length) || 0;
+      const qty = Math.max(0, Math.floor(Number(entry.qty) || 0));
+      if (length <= 0 || qty <= 0) return;
+      for (let i = 0; i < qty; i++) bins.push({ length, used: 0, items: [] });
+    });
+
+    const shortfallRows = [];
+    pieces.forEach(piece => {
+      let bestBin = null;
+      let bestRemaining = Infinity;
+      bins.forEach(bin => {
+        const cost = bin.items.length === 0 ? piece.length : piece.length + CUT_KERF;
+        const remaining = bin.length - bin.used - cost;
+        if (remaining >= 0 && remaining < bestRemaining) {
+          bestBin = bin;
+          bestRemaining = remaining;
+        }
+      });
+      if (bestBin) {
+        const cost = bestBin.items.length === 0 ? piece.length : piece.length + CUT_KERF;
+        bestBin.used += cost;
+        bestBin.items.push(piece);
+        perRow[piece.rowIdx].qtyCovered += 1;
+      } else {
+        shortfallRows.push({ name: perRow[piece.rowIdx].name, length: piece.length, qty: 1 });
+      }
+    });
+
+    const shortfallPack = packCutList(shortfallRows);
+
+    return { perRow, shortfallPack };
+  }
+
+  function parseCustomCutListText(text) {
+    return (text || '')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const parts = line.split(',').map(p => p.trim());
+        return { name: parts[0] || 'Unnamed part', length: Number(parts[1]) || 0, qty: Number(parts[2]) || 0 };
+      });
+  }
+
+  function formatCutListRowsAsText(rows) {
+    return rows.map(r => `${r.name}, ${r.length}, ${r.qty}`).join('\n');
   }
 
   // ---------------------------------------------------------------------
@@ -801,7 +929,8 @@
     `;
 
     el('print-document').innerHTML = '';
-    window.print();
+    const filename = q.quoteNumber || (previewQuoteNumber() + '_DRAFT');
+    printWithFilename(filename);
   }
 
   // ---------------------------------------------------------------------
@@ -972,7 +1101,13 @@
   }
 
   function exportBackup() {
-    const payload = { settings: state.settings, quotes: state.quotes, exportedAt: new Date().toISOString() };
+    const payload = {
+      settings: state.settings,
+      quotes: state.quotes,
+      stock: state.stock,
+      waste: state.waste,
+      exportedAt: new Date().toISOString(),
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -995,13 +1130,19 @@
         if (!confirm('This will replace all current quotes and settings on this device. Continue?')) return;
         state.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), data.settings);
         state.quotes = data.quotes;
+        state.stock = Array.isArray(data.stock) ? data.stock : [];
+        state.waste = Array.isArray(data.waste) ? data.waste : [];
         materialsDraft = structuredClone(state.settings.materials);
         saveSettings(state.settings);
         saveQuotes(state.quotes);
+        saveStock(state.stock);
+        saveWaste(state.waste);
         renderSettingsForm();
         renderSavedList();
         renderBom();
         renderSummary();
+        renderStockTable();
+        renderWasteTable();
         alert('Backup imported successfully.');
       } catch (err) {
         alert('Could not import file: ' + err.message);
@@ -1121,12 +1262,163 @@
     `;
 
     el('print-quote').innerHTML = '';
-    window.print();
+    printWithFilename(`${template.id}_Build_Pack`);
   }
 
   function bindDocumentsEvents() {
     el('documentsTemplate').addEventListener('change', renderDocumentsPreview);
     el('btnPrintDocument').addEventListener('click', printDocument);
+  }
+
+  // ---------------------------------------------------------------------
+  // Stock tab
+  // ---------------------------------------------------------------------
+
+  function renderStockTable() {
+    const tbody = el('stockBody');
+    tbody.innerHTML = '';
+    state.stock.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      const value = stockPieceValue(entry.length, entry.qty);
+      tr.innerHTML = `
+        <td>${Number(entry.length)}mm</td>
+        <td>${Number(entry.qty)}</td>
+        <td>${formatDateLong(entry.dateAdded)}</td>
+        <td>${daysInStock(entry.dateAdded)}</td>
+        <td>${money(value)}</td>
+        <td><button type="button" class="icon-btn" data-remove-stock="${idx}" title="Remove entry">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    renderStockSummary();
+  }
+
+  function renderStockSummary() {
+    const container = el('stockSummary');
+    if (state.stock.length === 0) {
+      container.innerHTML = '<p class="hint">No stock logged yet.</p>';
+      return;
+    }
+    const totalPieces = state.stock.reduce((sum, e) => sum + (Number(e.qty) || 0), 0);
+    const totalLinearMm = state.stock.reduce((sum, e) => sum + (Number(e.length) || 0) * (Number(e.qty) || 0), 0);
+    const totalValue = state.stock.reduce((sum, e) => sum + stockPieceValue(e.length, e.qty), 0);
+    container.innerHTML = `
+      <div class="cutlist-summary"><strong>${totalPieces}</strong> total pieces</div>
+      <div class="cutlist-offcuts">Total linear metres: ${(totalLinearMm / 1000).toFixed(2)}m</div>
+      <div class="cutlist-offcuts">Estimated value: ${money(totalValue)}</div>
+    `;
+  }
+
+  function renderStockCheckResult(result) {
+    const container = el('stockCheckResult');
+    const rowsHtml = result.perRow
+      .map(r => {
+        const short = r.qtyRequired - r.qtyCovered;
+        return `<tr><td>${escapeHtml(r.name)}</td><td>${r.qtyRequired}</td><td>${r.qtyCovered}</td><td>${short > 0 ? short : 0}</td></tr>`;
+      })
+      .join('');
+
+    let html = `
+      <div class="table-scroll">
+        <table class="bom-table">
+          <thead><tr><th>Part</th><th>Required</th><th>From stock</th><th>Short</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    `;
+    if (result.shortfallPack.palingsRequired > 0) {
+      const label = result.shortfallPack.palingsRequired === 1 ? 'paling' : 'palings';
+      html += `<div class="cutlist-summary"><strong>${result.shortfallPack.palingsRequired}</strong> additional ${label} needed to buy to cover the shortfall.</div>`;
+    } else {
+      html += `<div class="cutlist-summary">Fully covered by current stock — nothing to buy.</div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  function renderWasteTable() {
+    const tbody = el('wasteBody');
+    tbody.innerHTML = '';
+    state.waste.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${formatDateLong(entry.date)}</td>
+        <td>${escapeHtml(entry.description || '')}</td>
+        <td>${Number(entry.length)}mm</td>
+        <td>${Number(entry.qty)}</td>
+        <td>${money(stockPieceValue(entry.length, entry.qty))}</td>
+        <td><button type="button" class="icon-btn" data-remove-waste="${idx}" title="Remove entry">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    renderWasteSummary();
+  }
+
+  function renderWasteSummary() {
+    const container = el('wasteSummary');
+    if (state.waste.length === 0) {
+      container.innerHTML = '<p class="hint">No waste logged yet.</p>';
+      return;
+    }
+    const total = state.waste.reduce((sum, e) => sum + stockPieceValue(e.length, e.qty), 0);
+    container.innerHTML = `<div class="cutlist-summary">Running waste total: <strong>${money(total)}</strong></div>`;
+  }
+
+  function bindStockEvents() {
+    el('btnAddStock').addEventListener('click', () => {
+      const length = Number(el('stockLength').value) || 0;
+      const qty = Number(el('stockQty').value) || 0;
+      const dateAdded = el('stockDate').value || todayISO();
+      if (length <= 0 || qty <= 0) return;
+      state.stock.push({ id: uid(), length, qty, dateAdded });
+      saveStock(state.stock);
+      renderStockTable();
+      el('stockLength').value = '';
+      el('stockQty').value = 1;
+    });
+
+    el('stockBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeStock;
+      if (idx === undefined) return;
+      state.stock.splice(Number(idx), 1);
+      saveStock(state.stock);
+      renderStockTable();
+    });
+
+    el('stockCheckTemplate').addEventListener('change', e => {
+      const value = e.target.value;
+      if (!value) return;
+      const template = findCutListTemplate(value);
+      el('stockCheckList').value = formatCutListRowsAsText(template.rows);
+    });
+
+    el('btnCheckStock').addEventListener('click', () => {
+      const rows = parseCustomCutListText(el('stockCheckList').value);
+      if (rows.length === 0) {
+        el('stockCheckResult').innerHTML = '<p class="hint">Load a product or paste a cut list first.</p>';
+        return;
+      }
+      renderStockCheckResult(checkStockAgainstCutList(rows, state.stock));
+    });
+
+    el('btnAddWaste').addEventListener('click', () => {
+      const length = Number(el('wasteLength').value) || 0;
+      const qty = Number(el('wasteQty').value) || 0;
+      if (length <= 0 || qty <= 0) return;
+      state.waste.push({ id: uid(), date: todayISO(), description: el('wasteDescription').value.trim(), length, qty });
+      saveWaste(state.waste);
+      renderWasteTable();
+      el('wasteDescription').value = '';
+      el('wasteLength').value = '';
+      el('wasteQty').value = 1;
+    });
+
+    el('wasteBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeWaste;
+      if (idx === undefined) return;
+      state.waste.splice(Number(idx), 1);
+      saveWaste(state.waste);
+      renderWasteTable();
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -1165,12 +1457,17 @@
     bindSavedEvents();
     bindSettingsEvents();
     bindDocumentsEvents();
+    bindStockEvents();
 
     populateTemplateSelect('cutListTemplate');
     populateTemplateSelect('documentsTemplate');
+    populateTemplateSelect('stockCheckTemplate');
+    el('stockDate').value = todayISO();
     renderQuoteForm();
     renderSavedList();
     renderSettingsForm();
+    renderStockTable();
+    renderWasteTable();
   }
 
   document.addEventListener('DOMContentLoaded', init);

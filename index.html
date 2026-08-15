@@ -18,6 +18,7 @@
     <button type="button" class="tab-btn active" data-tab="quote" role="tab" aria-selected="true">Quote</button>
     <button type="button" class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved Quotes</button>
     <button type="button" class="tab-btn" data-tab="documents" role="tab" aria-selected="false">Documents</button>
+    <button type="button" class="tab-btn" data-tab="stock" role="tab" aria-selected="false">Stock</button>
     <button type="button" class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
   </nav>
 </header>
@@ -192,6 +193,88 @@
         <button type="button" id="btnPrintDocument" class="btn btn-secondary" disabled>Print / Save as PDF</button>
       </div>
     </div>
+  </section>
+
+  <!-- ===================== STOCK TAB ===================== -->
+  <section id="tab-stock" class="tab-panel" role="tabpanel">
+
+    <div class="card">
+      <h2>Add Stock</h2>
+      <p class="hint">Log paling/offcut stock as it comes in or gets set aside for reuse. Stock is stored on this device only — export a backup regularly (Settings &rarr; Backup).</p>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="stockLength">Length (mm)</label>
+          <input type="number" id="stockLength" min="0" step="1" />
+        </div>
+        <div class="field">
+          <label for="stockQty">Quantity</label>
+          <input type="number" id="stockQty" min="1" step="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="stockDate">Date added</label>
+          <input type="date" id="stockDate" />
+        </div>
+      </div>
+      <button type="button" id="btnAddStock" class="btn btn-primary">+ Add Stock Entry</button>
+    </div>
+
+    <div class="card">
+      <h2>Current Stock</h2>
+      <div class="table-scroll">
+        <table id="stockTable" class="bom-table">
+          <thead>
+            <tr><th>Length</th><th>Qty</th><th>Date added</th><th>Days in stock</th><th>Value</th><th></th></tr>
+          </thead>
+          <tbody id="stockBody"></tbody>
+        </table>
+      </div>
+      <div id="stockSummary" class="cutlist-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>What Can I Build?</h2>
+      <p class="hint">Load a product's cut list, or paste your own, to see what's covered by current stock and what you'd need to buy.</p>
+      <div class="field">
+        <label for="stockCheckTemplate">Load product</label>
+        <select id="stockCheckTemplate"></select>
+      </div>
+      <div class="field">
+        <label for="stockCheckList">Cut list — one part per line: name, length, qty</label>
+        <textarea id="stockCheckList" rows="5" placeholder="Side panel, 850, 4&#10;Base slat, 435, 9"></textarea>
+      </div>
+      <button type="button" id="btnCheckStock" class="btn btn-secondary">Check Stock</button>
+      <div id="stockCheckResult" class="cutlist-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>Waste Log</h2>
+      <p class="hint">Log offcuts that ended up as waste, to keep a running total of what it's costing you.</p>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="wasteDescription">Description</label>
+          <input type="text" id="wasteDescription" placeholder="e.g. mis-cut side panel" />
+        </div>
+        <div class="field">
+          <label for="wasteLength">Length (mm)</label>
+          <input type="number" id="wasteLength" min="0" step="1" />
+        </div>
+        <div class="field">
+          <label for="wasteQty">Quantity</label>
+          <input type="number" id="wasteQty" min="1" step="1" value="1" />
+        </div>
+      </div>
+      <button type="button" id="btnAddWaste" class="btn btn-ghost">+ Log Waste</button>
+      <div class="table-scroll">
+        <table id="wasteTable" class="bom-table">
+          <thead>
+            <tr><th>Date</th><th>Description</th><th>Length</th><th>Qty</th><th>Value</th><th></th></tr>
+          </thead>
+          <tbody id="wasteBody"></tbody>
+        </table>
+      </div>
+      <div id="wasteSummary" class="cutlist-result"></div>
+    </div>
+
   </section>
 
   <!-- ===================== SETTINGS TAB ===================== -->

@@ -1189,8 +1189,41 @@
     return state.quotes.find(q => q.id === select.value) || null;
   }
 
-  function getShoppingListRows(template, palingsRequired) {
-    const castorCount = getTemplateCastorCount(template);
+  // Decides what drives the build pack: a linked quote's own cut list (for a
+  // custom, non-catalogue job) takes priority over the Product dropdown
+  // whenever that quote actually has cut list entries; otherwise falls back
+  // to the selected product template.
+  function resolveBuildPackSource(linkedQuote) {
+    if (linkedQuote && linkedQuote.cutList && linkedQuote.cutList.length > 0) {
+      return {
+        mode: 'quote',
+        quote: linkedQuote,
+        cutListRows: linkedQuote.cutList,
+        title: 'Custom Build',
+        filenameBase: `${linkedQuote.quoteNumber || 'Custom_Build'}_Build_Pack`,
+      };
+    }
+    const templateId = el('documentsTemplate').value;
+    if (templateId) {
+      const template = findCutListTemplate(templateId);
+      return {
+        mode: 'template',
+        template,
+        cutListRows: template.rows,
+        title: `${template.id} ${template.name}`,
+        filenameBase: `${template.id}_Build_Pack`,
+      };
+    }
+    return null;
+  }
+
+  function getShoppingListRows(source, palingsRequired) {
+    if (source.mode === 'quote') {
+      return source.quote.bom
+        .filter(line => Number(line.qty) > 0)
+        .map(line => ({ name: line.name, qty: String(Number(line.qty)), note: '' }));
+    }
+    const castorCount = getTemplateCastorCount(source.template);
     const rows = [{ name: 'Palings', qty: String(palingsRequired), note: '' }];
     if (castorCount > 0) rows.push({ name: 'Castors', qty: String(castorCount), note: '' });
     rows.push(
@@ -1204,33 +1237,38 @@
   }
 
   function renderDocumentsPreview() {
-    const templateId = el('documentsTemplate').value;
     const container = el('documentsPreview');
     const printBtn = el('btnPrintDocument');
+    const linkedQuote = getDocumentsLinkedQuote();
+    const linkedQuoteHasCutList = !!(linkedQuote && linkedQuote.cutList && linkedQuote.cutList.length > 0);
+    el('documentsTemplate').disabled = linkedQuoteHasCutList;
 
-    if (!templateId) {
-      container.innerHTML = '<p class="hint">Select a product above to generate the cut list, shopping list, and quality checklist.</p>';
+    const source = resolveBuildPackSource(linkedQuote);
+
+    if (!source) {
+      container.innerHTML = '<p class="hint">Select a product above, or link an accepted quote that has its own cut list, to generate the build pack.</p>';
       printBtn.disabled = true;
-      printBtn.title = 'Select a product first';
+      printBtn.title = 'Select a product or link a quote with a cut list first';
       return;
     }
     printBtn.title = '';
 
-    const template = findCutListTemplate(templateId);
-    const result = packCutList(template.rows);
-    const rowsHtml = template.rows
+    const result = packCutList(source.cutListRows);
+    const rowsHtml = source.cutListRows
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
       .join('');
     const offcutText = result.offcuts.length
       ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
       : '';
 
-    const linkedQuote = getDocumentsLinkedQuote();
     const jobHeaderHtml = linkedQuote
       ? `<p class="doc-job-header-preview">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
       : '';
+    const sourceNoteHtml = source.mode === 'quote'
+      ? `<div class="template-notice info">Using the cut list &amp; materials from quote ${escapeHtml(linkedQuote.quoteNumber)} — the Product dropdown is disabled while a quote with its own cut list is linked.</div>`
+      : '';
 
-    const shoppingRowsHtml = getShoppingListRows(template, result.palingsRequired)
+    const shoppingRowsHtml = getShoppingListRows(source, result.palingsRequired)
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
       .join('');
 
@@ -1238,6 +1276,7 @@
 
     let html = `
       ${jobHeaderHtml}
+      ${sourceNoteHtml}
       <div class="table-scroll">
         <table class="bom-table">
           <thead><tr><th>Part</th><th>Length</th><th>Qty</th></tr></thead>
@@ -1249,11 +1288,14 @@
         ${offcutText ? `<div class="cutlist-offcuts">Offcuts: ${offcutText}</div>` : ''}
       </div>
     `;
-    if (template.warning) {
-      html += `<div class="template-notice warning">⚠ ${escapeHtml(template.warning)}</div>`;
-    } else if (template.note) {
-      html += `<div class="template-notice info">${escapeHtml(template.note)}</div>`;
+    if (source.mode === 'template' && source.template.warning) {
+      html += `<div class="template-notice warning">⚠ ${escapeHtml(source.template.warning)}</div>`;
+    } else if (source.mode === 'template' && source.template.note) {
+      html += `<div class="template-notice info">${escapeHtml(source.template.note)}</div>`;
     }
+    result.warnings.forEach(w => {
+      html += `<div class="template-notice warning">⚠ ${escapeHtml(w)}</div>`;
+    });
 
     html += `
       <h3 class="doc-preview-subhead">Shopping list</h3>
@@ -1273,25 +1315,30 @@
   }
 
   function printDocument() {
-    const templateId = el('documentsTemplate').value;
-    if (!templateId) return;
+    const linkedQuote = getDocumentsLinkedQuote();
+    const source = resolveBuildPackSource(linkedQuote);
+    if (!source) return;
 
-    const template = findCutListTemplate(templateId);
-    const result = packCutList(template.rows);
-    const rowsHtml = template.rows
+    const result = packCutList(source.cutListRows);
+    const rowsHtml = source.cutListRows
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
       .join('');
     const offcutText = result.offcuts.length
       ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
       : '';
-    const warningHtml = template.warning ? `<p class="pq-warning">⚠ ${escapeHtml(template.warning)}</p>` : '';
+    let warningHtml = '';
+    if (source.mode === 'template' && source.template.warning) {
+      warningHtml += `<p class="pq-warning">⚠ ${escapeHtml(source.template.warning)}</p>`;
+    }
+    result.warnings.forEach(w => {
+      warningHtml += `<p class="pq-warning">⚠ ${escapeHtml(w)}</p>`;
+    });
 
-    const linkedQuote = getDocumentsLinkedQuote();
     const jobHeaderHtml = linkedQuote
       ? `<p class="doc-job-header">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
       : '';
 
-    const shoppingRowsHtml = getShoppingListRows(template, result.palingsRequired)
+    const shoppingRowsHtml = getShoppingListRows(source, result.palingsRequired)
       .map(r => `<tr><td class="doc-checkbox"></td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
       .join('');
 
@@ -1303,7 +1350,7 @@
       <div class="pq-header">
         <div>
           <h1>PK Woodworking</h1>
-          <div>Build Pack — ${escapeHtml(template.id)} ${escapeHtml(template.name)}</div>
+          <div>Build Pack — ${escapeHtml(source.title)}</div>
         </div>
         <div class="pq-meta">
           <div><strong>Generated:</strong> ${formatDateLong(todayISO())}</div>
@@ -1367,7 +1414,7 @@
     `;
 
     el('print-quote').innerHTML = '';
-    printWithFilename(`${template.id}_Build_Pack`);
+    printWithFilename(source.filenameBase);
   }
 
   function populateAcceptedQuoteSelect() {

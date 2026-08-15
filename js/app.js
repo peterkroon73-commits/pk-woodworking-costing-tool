@@ -135,6 +135,36 @@
     },
   ];
 
+  // Standard part codes/descriptions offered in the Cut List's Part Name
+  // combobox. Purely a typing aid - free text is always still accepted.
+  const STANDARD_PART_OPTIONS = [
+    'A1 — Corner Leg',
+    'A2 — Centre Support Leg',
+    'A3 — Rear Upright (laminated)',
+    'B1 — Long Side Panel',
+    'B2 — Short Side Panel',
+    'B3 — Back Panel',
+    'C1 — Base Support Rail',
+    'C3 — Base Slat',
+    'D1 — Castor Block',
+    'D2 — Castor Support',
+    'E1 — Long Top Cap',
+    'E2 — Short/Side Top Cap',
+    'F1 — Horizontal Trellis Rail',
+    'F2 — Vertical Trellis Slat',
+    'G1 — Shelf Board',
+    'G2 — Centre Notched Support',
+    'G3 — Tower Top Cap',
+    'J1 — Cleat (host side)',
+    'J2 — Cleat (box side)',
+  ];
+
+  function populatePartNameOptions() {
+    el('cutListPartOptions').innerHTML = STANDARD_PART_OPTIONS
+      .map(name => `<option value="${escapeAttr(name)}"></option>`)
+      .join('');
+  }
+
   function findCutListTemplate(id) {
     return CUT_LIST_TEMPLATES.find(t => t.id === id) || null;
   }
@@ -601,7 +631,7 @@
     (state.current.cutList || []).forEach((row, idx) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="name-input" type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(row.name)}" placeholder="e.g. Side panel" /></td>
+        <td><input class="name-input" type="text" list="cutListPartOptions" data-idx="${idx}" data-field="name" value="${escapeAttr(row.name)}" placeholder="e.g. Side panel" /></td>
         <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="length" value="${row.length}" /></td>
         <td><input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${row.qty}" /></td>
         <td><button type="button" class="icon-btn" data-remove-cut="${idx}" title="Remove item">✕</button></td>
@@ -1626,6 +1656,7 @@
     bindDocumentsEvents();
     bindStockEvents();
 
+    populatePartNameOptions();
     populateTemplateSelect('cutListTemplate');
     populateTemplateSelect('documentsTemplate');
     populateTemplateSelect('stockCheckTemplate');

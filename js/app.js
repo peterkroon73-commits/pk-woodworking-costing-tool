@@ -796,6 +796,7 @@
 
       <div class="pq-footer">
         <p>Thank you for choosing PK Woodworking. This quote is valid until ${validUntil}.</p>
+        <p class="pq-source-note">Materials sourced via Pete &amp; Meeks Handy Services (ABN 37 791 164 057)</p>
       </div>
     `;
 

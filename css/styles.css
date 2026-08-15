@@ -329,6 +329,13 @@ input[readonly] {
   font-size: 0.85rem;
 }
 
+.source-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-top: 0.75rem;
+}
+
 .cutlist-result {
   margin-top: 0.75rem;
   padding: 0.7rem 0.85rem;
@@ -451,6 +458,9 @@ input[readonly] {
     margin-top: 2rem;
     font-size: 0.8rem;
     color: #555;
+  }
+  .pq-source-note {
+    font-style: italic;
   }
 }
 

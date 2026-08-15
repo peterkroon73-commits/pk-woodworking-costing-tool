@@ -59,12 +59,16 @@
       id: 'PKP-001',
       name: 'Standard Raised Planter',
       category: 'Planters',
+      size: '1170 x 650 x 530mm',
+      feature: 'on castors',
       rows: [...PKP001_ROWS],
     },
     {
       id: 'PKP-002',
       name: 'Trellis Raised Planter',
       category: 'Planters',
+      size: '1170 x 650 x 530mm (planter), 1785mm overall height with trellis',
+      feature: 'on castors, with built-in trellis',
       rows: [
         ...PKP001_ROWS,
         { name: 'A3 (rear upright, laminated)', length: 1785, qty: 6 },
@@ -77,6 +81,8 @@
       name: 'Planter Bench',
       category: 'Planters',
       warning: 'Prototype only — confirm against physical prototype before use. Uses mixed 100mm paling + 70×35mm framing stock.',
+      // No locked size yet - buildInvoiceDescription() falls back to a
+      // "confirm before quoting" line instead of a fabricated dimension.
       rows: [
         { name: 'A1-style leg', length: 650, qty: 16 },
         { name: 'Wall panel', length: 420, qty: 24 },
@@ -90,6 +96,8 @@
       name: 'Offcut Mini Planter',
       category: 'Planters',
       warning: 'Rev B dimensions shown — confirm against your locked Rev C spec.',
+      size: '360 x 350 x 500mm',
+      feature: 'handmade from workshop offcuts',
       rows: [
         { name: 'A1', length: 500, qty: 8 },
         { name: 'B1 (long side)', length: 360, qty: 8 },
@@ -104,6 +112,8 @@
       id: 'PKP-005',
       name: 'Corner Nursery Shelf Planter',
       category: 'Planters',
+      size: '700 x 550mm (box), 1835mm overall height with shelf tower',
+      feature: 'on castors, with 5-shelf nursery tower',
       rows: [
         { name: 'A1 (front leg)', length: 500, qty: 4 },
         { name: 'A3 (rear upright)', length: 1785, qty: 4 },
@@ -125,6 +135,8 @@
       name: 'Universal Pot Trough',
       category: 'Accessories',
       note: 'Accessory — quantities are per 2-box batch.',
+      size: '400 x 150mm',
+      feature: 'screw-mount accessory, fits PKP-004 (per 2-box batch)',
       rows: [
         { name: 'B1 (front wall)', length: 400, qty: 2 },
         { name: 'B2 (end wall)', length: 150, qty: 4 },
@@ -134,6 +146,19 @@
       ],
     },
   ];
+
+  // Builds the single customer-facing line-item description for the
+  // printed/PDF quote, from a Cut List Template's real size/feature data.
+  // PKP-003 has no locked size yet, so it gets an explicit "confirm before
+  // quoting" line instead of a fabricated dimension.
+  function buildInvoiceDescription(template) {
+    if (!template) return '';
+    if (!template.size) {
+      return `${template.name} — PROTOTYPE, size not yet confirmed — confirm before quoting`;
+    }
+    const featurePart = template.feature ? `, ${template.feature}` : '';
+    return `${template.name} — ${template.size} — handmade treated pine${featurePart}`;
+  }
 
   // Standard part codes/descriptions offered in the Cut List's Part Name
   // combobox. Purely a typing aid - free text is always still accepted.
@@ -595,6 +620,8 @@
       client: { name: '', contact: '', notes: '' },
       cutList: [],
       cutListTemplateId: null,
+      itemDescription: '',   // single line-item shown on the printed/emailed customer quote
+      customerNote: '',      // optional extra line shown under itemDescription
       bom: s.materials.map(m => ({
         materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0, priceOverridden: false,
       })),
@@ -606,6 +633,16 @@
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  // Fills in defaults for fields added after some quotes were already
+  // saved (older quotes loaded from a save, a duplicate, or a draft won't
+  // have them yet).
+  function normalizeQuote(q) {
+    q.cutList = q.cutList || [];
+    q.itemDescription = q.itemDescription || '';
+    q.customerNote = q.customerNote || '';
+    return q;
   }
 
   function previewQuoteNumber() {
@@ -825,6 +862,11 @@
     el('clientNotes').value = state.current.client.notes;
   }
 
+  function renderItemDescriptionFields() {
+    el('itemDescription').value = state.current.itemDescription;
+    el('customerNote').value = state.current.customerNote;
+  }
+
   function renderBom() {
     syncDefaultBomPrices(state.current);
     const tbody = el('bomBody');
@@ -897,12 +939,14 @@
 
     state.current.cutList = template.rows.map(r => ({ id: uid(), name: r.name, length: r.length, qty: r.qty }));
     state.current.cutListTemplateId = template.id;
+    state.current.itemDescription = buildInvoiceDescription(template);
     renderCutListRows();
     refreshCutList();
     if (!state.priceOverridden) state.current.sellingPriceOverride = null;
     renderBom();
     renderSummary();
     renderTemplateNotice();
+    renderItemDescriptionFields();
     saveDraft();
   }
 
@@ -970,6 +1014,7 @@
   function renderQuoteForm() {
     renderQuoteMeta();
     renderClient();
+    renderItemDescriptionFields();
     renderCutListRows();
     renderTemplateNotice();
     refreshCutList();
@@ -1009,6 +1054,9 @@
     el('clientName').addEventListener('input', e => { state.current.client.name = e.target.value; saveDraft(); });
     el('clientContact').addEventListener('input', e => { state.current.client.contact = e.target.value; saveDraft(); });
     el('clientNotes').addEventListener('input', e => { state.current.client.notes = e.target.value; saveDraft(); });
+
+    el('itemDescription').addEventListener('input', e => { state.current.itemDescription = e.target.value; saveDraft(); });
+    el('customerNote').addEventListener('input', e => { state.current.customerNote = e.target.value; saveDraft(); });
 
     el('bomBody').addEventListener('input', e => {
       const t = e.target;
@@ -1212,6 +1260,13 @@
     setTimeout(() => { el('saveStatus').textContent = ''; }, 4000);
   }
 
+  // Falls back to a generic line only when the quote has neither an
+  // auto-filled (from a Cut List template) nor a manually typed
+  // description, so the printed quote never shows a blank item line.
+  function resolveItemDescription(quote) {
+    return quote.itemDescription || 'Custom timber & joinery project — handmade treated pine';
+  }
+
   function printCurrentQuote() {
     const q = state.current;
     if (!q.quoteNumber) {
@@ -1220,11 +1275,6 @@
     const t = computeTotals(q);
     const quoteNo = q.quoteNumber || previewQuoteNumber() + ' (draft)';
     const validUntil = formatDateLong(addDays(q.date, q.validDays));
-    const itemsHtml = q.bom
-      .filter(line => Number(line.qty) > 0)
-      .map(line => `<tr><td>${escapeHtml(line.name)}</td><td>${Number(line.qty)} ${escapeHtml(line.unit)}</td></tr>`)
-      .join('');
-    const labourRow = Number(q.labourHours) > 0 ? `<tr><td>Labour &amp; workmanship</td><td>${Number(q.labourHours)} hr</td></tr>` : '';
 
     el('print-quote').innerHTML = `
       <div class="pq-header">
@@ -1248,11 +1298,9 @@
       ${q.client.notes ? `<div class="pq-section"><h3>Order notes</h3><div>${escapeHtml(q.client.notes)}</div></div>` : ''}
 
       <div class="pq-section">
-        <h3>Items</h3>
-        <table class="pq-table">
-          <thead><tr><th>Description</th><th>Qty</th></tr></thead>
-          <tbody>${itemsHtml}${labourRow}</tbody>
-        </table>
+        <h3>Description</h3>
+        <div>${escapeHtml(resolveItemDescription(q))}</div>
+        ${q.customerNote ? `<div class="pq-customer-note">${escapeHtml(q.customerNote)}</div>` : ''}
       </div>
 
       <div class="pq-total-row">
@@ -1392,8 +1440,7 @@
       if (!q) return;
 
       if (btn.dataset.action === 'load') {
-        state.current = structuredClone(q);
-        state.current.cutList = state.current.cutList || [];
+        state.current = normalizeQuote(structuredClone(q));
         state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
         renderQuoteForm();
         saveDraft();
@@ -1406,7 +1453,7 @@
         copy.status = 'Draft';
         copy.createdAt = new Date().toISOString();
         copy.updatedAt = copy.createdAt;
-        copy.cutList = copy.cutList || [];
+        normalizeQuote(copy);
         state.current = copy;
         state.priceOverridden = q.sellingPriceOverride !== null && q.sellingPriceOverride !== undefined;
         renderQuoteForm();
@@ -2186,8 +2233,7 @@
 
   function initApp() {
     const draft = loadDraft();
-    state.current = draft || blankQuote();
-    state.current.cutList = state.current.cutList || [];
+    state.current = normalizeQuote(draft || blankQuote());
     state.priceOverridden = state.current.sellingPriceOverride !== null && state.current.sellingPriceOverride !== undefined;
 
     bindTabs();

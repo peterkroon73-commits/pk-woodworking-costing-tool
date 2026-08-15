@@ -42,15 +42,27 @@ static web app that runs entirely in the browser.
   profit/margin. This internal breakdown is never shown on the printed
   customer quote.
 - **Print / Save as PDF** — a clean, customer-facing quote (business name,
-  quote #, date, valid-until date, client details, itemised parts and
-  labour, and the total price only) that prints or saves to PDF straight
-  from the phone or desktop browser's print dialog. Internal costs and
+  quote #, date, valid-until date, client details, a single item description,
+  and the total price only) that prints or saves to PDF straight from the
+  phone or desktop browser's print dialog. It shows one simple line — like an
+  invoice — not the itemised materials list; see **Customer Quote
+  Description** below for where that line comes from. Internal costs and
   profit margin are deliberately excluded from this view.
+- **Customer Quote Description** — the Quote tab has an "Item description"
+  field that's what actually prints on the customer quote, instead of the
+  itemised Bill of Materials below it. Loading a Cut List template
+  auto-fills it (e.g. "Standard Raised Planter — 1170 x 650 x 530mm —
+  handmade treated pine, on castors") from that product's real size/feature
+  data; edit freely, or type your own for a custom build. An optional "Note
+  for customer" field adds one extra line underneath (e.g. delivery timing)
+  — left blank, it shows nothing.
 - **Email Quote** — opens your device's email app with a pre-filled message
-  to the client: the same customer-facing items/total as the printed quote,
-  plus a clear "reply ACCEPT or DECLINE" section so their reply is their
-  confirmation. Auto-fills the "To" field if the client's Contact field is a
-  valid email address; otherwise you just add it before hitting send.
+  to the client: an itemised materials/labour list (name + qty, no cost
+  breakdown) plus a clear "reply ACCEPT or DECLINE" section so their reply
+  is their confirmation. Auto-fills the "To" field if the client's Contact
+  field is a valid email address; otherwise you just add it before hitting
+  send. (Doesn't yet use the simplified single-line description the printed
+  quote uses — still itemised, for now.)
 - **Saved quotes** — every saved quote syncs to your account and is
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.

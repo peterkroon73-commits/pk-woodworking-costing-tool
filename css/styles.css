@@ -460,6 +460,11 @@ input[readonly] {
     border-bottom: 1px solid #ccc;
     padding-bottom: 0.2rem;
   }
+  .pq-customer-note {
+    margin-top: 0.4rem;
+    font-size: 0.92rem;
+    color: #444;
+  }
   .pq-table { width: 100%; border-collapse: collapse; }
   .pq-table th, .pq-table td {
     text-align: left;

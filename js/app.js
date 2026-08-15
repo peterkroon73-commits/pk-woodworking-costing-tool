@@ -139,6 +139,32 @@
     return CUT_LIST_TEMPLATES.find(t => t.id === id) || null;
   }
 
+  // Castor hardware count is inferred from the qty of cut list rows naming a
+  // "castor block" specifically (the wooden mount each castor sits on) - one
+  // castor per block - so it stays sourced from the existing cut list data
+  // rather than being entered separately per product. Deliberately narrower
+  // than matching "castor" generally, since some products also have a
+  // "castor support" brace row that isn't a per-castor mounting point.
+  function getTemplateCastorCount(template) {
+    return template.rows
+      .filter(r => /castor block/i.test(r.name))
+      .reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+  }
+
+  const QUALITY_CHECKLIST_ITEMS = [
+    'Overall dimensions correct',
+    'Square',
+    'Sits level',
+    'Legs secure',
+    'Base/shelves secure',
+    'Castors rotate freely (if applicable)',
+    'Top caps flush',
+    'No protruding fasteners',
+    'Glue cleaned off',
+    'Edges sanded smooth',
+    'Ready for customer',
+  ];
+
   function uid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -1213,6 +1239,31 @@
       : '';
     const warningHtml = template.warning ? `<p class="pq-warning">⚠ ${escapeHtml(template.warning)}</p>` : '';
 
+    const linkedQuote = state.quotes.find(q => q.id === el('documentsLinkedQuote').value);
+    const jobHeaderHtml = linkedQuote
+      ? `<p class="doc-job-header">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
+      : '';
+
+    const castorCount = getTemplateCastorCount(template);
+    const shoppingRows = [
+      { name: 'Palings', qty: String(result.palingsRequired), note: '' },
+    ];
+    if (castorCount > 0) shoppingRows.push({ name: 'Castors', qty: String(castorCount), note: '' });
+    shoppingRows.push(
+      { name: 'Screws', qty: '', note: '' },
+      { name: 'Brads', qty: '', note: '' },
+      { name: 'Glue', qty: '', note: 'Use workshop stock first' },
+      { name: 'Weed mat', qty: '', note: 'Use workshop stock first' },
+      { name: 'Sandpaper', qty: '', note: 'Use workshop stock first' }
+    );
+    const shoppingRowsHtml = shoppingRows
+      .map(r => `<tr><td class="doc-checkbox"></td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
+      .join('');
+
+    const qualityItemsHtml = QUALITY_CHECKLIST_ITEMS
+      .map(item => `<li><span class="doc-checkbox-inline"></span> ${escapeHtml(item)}</li>`)
+      .join('');
+
     el('print-document').innerHTML = `
       <div class="pq-header">
         <div>
@@ -1223,6 +1274,8 @@
           <div><strong>Generated:</strong> ${formatDateLong(todayISO())}</div>
         </div>
       </div>
+
+      ${jobHeaderHtml}
 
       ${warningHtml}
 
@@ -1256,6 +1309,23 @@
         <div class="doc-notes-line"></div>
       </div>
 
+      <div class="pq-section doc-page-break">
+        <h3>Shopping List</h3>
+        <table class="pq-table doc-shopping-table">
+          <thead><tr><th></th><th>Item</th><th>Qty</th><th>Note</th></tr></thead>
+          <tbody>${shoppingRowsHtml}</tbody>
+        </table>
+      </div>
+
+      <div class="pq-section doc-page-break">
+        <h3>Quality Inspection</h3>
+        <ul class="doc-checklist">${qualityItemsHtml}</ul>
+        <div class="doc-approval">
+          <div>Approved for sale: &nbsp; Y &nbsp;/&nbsp; N</div>
+          <div class="doc-signature-line">Signature: ___________________________ &nbsp;&nbsp; Date: ______________</div>
+        </div>
+      </div>
+
       <div class="pq-footer">
         <p class="pq-source-note">Materials sourced via Pete &amp; Meeks Handy Services (ABN 37 791 164 057)</p>
       </div>
@@ -1263,6 +1333,16 @@
 
     el('print-quote').innerHTML = '';
     printWithFilename(`${template.id}_Build_Pack`);
+  }
+
+  function populateAcceptedQuoteSelect() {
+    const select = el('documentsLinkedQuote');
+    const accepted = state.quotes.filter(q => q.status === 'Accepted');
+    let html = '<option value="">-- No linked quote --</option>';
+    accepted.forEach(q => {
+      html += `<option value="${escapeAttr(q.id)}">${escapeHtml(q.quoteNumber)} — ${escapeHtml(q.client.name || '(no client name)')}</option>`;
+    });
+    select.innerHTML = html;
   }
 
   function bindDocumentsEvents() {
@@ -1434,6 +1514,7 @@
     document.querySelectorAll('.tab-panel').forEach(p => {
       p.classList.toggle('active', p.id === 'tab-' + name);
     });
+    if (name === 'documents') populateAcceptedQuoteSelect();
   }
 
   function bindTabs() {
@@ -1462,6 +1543,7 @@
     populateTemplateSelect('cutListTemplate');
     populateTemplateSelect('documentsTemplate');
     populateTemplateSelect('stockCheckTemplate');
+    populateAcceptedQuoteSelect();
     el('stockDate').value = todayISO();
     renderQuoteForm();
     renderSavedList();

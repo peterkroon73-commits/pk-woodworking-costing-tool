@@ -471,6 +471,51 @@ input[readonly] {
     height: 1.8em;
     border-bottom: 1px solid #ddd;
   }
+  .doc-job-header {
+    font-size: 1rem;
+    font-weight: bold;
+    margin: -0.4rem 0 1rem;
+  }
+  .doc-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+  .doc-checkbox {
+    width: 1.4em;
+  }
+  .doc-checkbox::before,
+  .doc-checkbox-inline {
+    content: '';
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    border: 1.5px solid #333;
+    flex-shrink: 0;
+  }
+  .doc-shopping-table th:first-child,
+  .doc-shopping-table td:first-child {
+    width: 1.4em;
+  }
+  .doc-checklist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .doc-checklist li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.1rem;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95rem;
+  }
+  .doc-approval {
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+  }
+  .doc-approval div {
+    margin-bottom: 1.2rem;
+  }
   .pq-total-row {
     display: flex;
     justify-content: flex-end;

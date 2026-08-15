@@ -516,8 +516,14 @@
       .map(line => line.trim())
       .filter(Boolean)
       .map(line => {
+        // Read length/qty off the END of the line, since the part name/description
+        // itself may contain commas (e.g. "C1 (base rail, rip 50mm), 1000, 2") -
+        // splitting from the start would misread the description as the numbers.
         const parts = line.split(',').map(p => p.trim());
-        return { name: parts[0] || 'Unnamed part', length: Number(parts[1]) || 0, qty: Number(parts[2]) || 0 };
+        const qty = Number(parts.pop()) || 0;
+        const length = Number(parts.pop()) || 0;
+        const name = parts.join(', ') || 'Unnamed part';
+        return { name, length, qty };
       });
   }
 

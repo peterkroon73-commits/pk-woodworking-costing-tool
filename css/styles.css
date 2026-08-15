@@ -444,6 +444,33 @@ input[readonly] {
     border-bottom: 1px solid #ddd;
     font-size: 0.95rem;
   }
+  .pq-warning {
+    background: #fbe9e4;
+    color: #a4372a;
+    font-weight: bold;
+    padding: 0.5rem 0.7rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .doc-record-table th:nth-child(2),
+  .doc-record-table th:nth-child(3),
+  .doc-record-table td.doc-blank-cell {
+    width: 25%;
+  }
+  .doc-blank-cell {
+    height: 1.8em;
+  }
+  .doc-notes-label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.8rem;
+    color: #555;
+    margin-top: 0.8rem;
+  }
+  .doc-notes-line {
+    height: 1.8em;
+    border-bottom: 1px solid #ddd;
+  }
   .pq-total-row {
     display: flex;
     justify-content: flex-end;

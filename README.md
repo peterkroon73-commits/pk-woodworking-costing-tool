@@ -6,9 +6,23 @@ static web app that runs entirely in the browser.
 
 ## Features
 
+- **Cut list & paling calculator** — list the parts you need to cut (name,
+  length, quantity) and it packs them into 1800mm palings (largest pieces
+  first, 3mm saw-kerf allowance) to work out how many palings you need and
+  what offcuts you'll have left over. Load a preset product from **Load
+  template** to skip manual entry, or build a custom list from scratch.
+  The calculated paling count auto-fills into the Bill of Materials below.
 - **Bill of materials panel** — pick quantities against a per-unit price list
   (palings, castors, screws, brads, glue by default; add your own line items
-  or custom one-off items per quote).
+  or custom one-off items per quote). In-progress quotes always track the
+  current Settings price list; once a quote is saved, its prices lock in as
+  a historical record.
+- **Documents tab** — pick a product template and generate a printable
+  workshop build pack: the same cut list + paling/offcut calculation, plus a
+  blank "Build Record" (planned vs. actual cutting time, assembly time,
+  total labour, and a space for design-change notes) to fill in by hand.
+  Print or save as PDF the same way as a quote. Build packs aren't saved in
+  the app — print or export the PDF to keep a copy.
 - **Labour & overhead** — labour hours × hourly rate, plus a configurable
   workshop overhead percentage applied on top of direct costs (materials +
   labour).
@@ -28,7 +42,8 @@ static web app that runs entirely in the browser.
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.
 - **Works on mobile** — responsive layout, large touch targets, and a
-  sticky tabbed header for quick access to Quote / Saved Quotes / Settings.
+  sticky tabbed header for quick access to Quote / Saved Quotes / Documents /
+  Settings.
 
 ## How data is stored
 

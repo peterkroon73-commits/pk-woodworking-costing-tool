@@ -387,8 +387,8 @@
     });
   }
 
-  function renderTemplateOptions() {
-    const select = el('cutListTemplate');
+  function populateTemplateSelect(selectId) {
+    const select = el(selectId);
     const categories = [];
     CUT_LIST_TEMPLATES.forEach(t => {
       if (!categories.includes(t.category)) categories.push(t.category);
@@ -800,6 +800,7 @@
       </div>
     `;
 
+    el('print-document').innerHTML = '';
     window.print();
   }
 
@@ -1012,6 +1013,123 @@
   }
 
   // ---------------------------------------------------------------------
+  // Documents tab
+  // ---------------------------------------------------------------------
+
+  function renderDocumentsPreview() {
+    const templateId = el('documentsTemplate').value;
+    const container = el('documentsPreview');
+    const printBtn = el('btnPrintDocument');
+
+    if (!templateId) {
+      container.innerHTML = '';
+      printBtn.disabled = true;
+      return;
+    }
+
+    const template = findCutListTemplate(templateId);
+    const result = packCutList(template.rows);
+    const rowsHtml = template.rows
+      .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
+      .join('');
+    const offcutText = result.offcuts.length
+      ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
+      : '';
+
+    let html = `
+      <div class="table-scroll">
+        <table class="bom-table">
+          <thead><tr><th>Part</th><th>Length</th><th>Qty</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <div class="cutlist-result">
+        <div class="cutlist-summary"><strong>${result.palingsRequired}</strong> ${result.palingsRequired === 1 ? 'paling' : 'palings'} required <span class="hint">(1800mm stock, 3mm kerf)</span></div>
+        ${offcutText ? `<div class="cutlist-offcuts">Offcuts: ${offcutText}</div>` : ''}
+      </div>
+    `;
+    if (template.warning) {
+      html += `<div class="template-notice warning">⚠ ${escapeHtml(template.warning)}</div>`;
+    } else if (template.note) {
+      html += `<div class="template-notice info">${escapeHtml(template.note)}</div>`;
+    }
+
+    container.innerHTML = html;
+    printBtn.disabled = false;
+  }
+
+  function printDocument() {
+    const templateId = el('documentsTemplate').value;
+    if (!templateId) return;
+
+    const template = findCutListTemplate(templateId);
+    const result = packCutList(template.rows);
+    const rowsHtml = template.rows
+      .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
+      .join('');
+    const offcutText = result.offcuts.length
+      ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
+      : '';
+    const warningHtml = template.warning ? `<p class="pq-warning">⚠ ${escapeHtml(template.warning)}</p>` : '';
+
+    el('print-document').innerHTML = `
+      <div class="pq-header">
+        <div>
+          <h1>PK Woodworking</h1>
+          <div>Build Pack — ${escapeHtml(template.id)} ${escapeHtml(template.name)}</div>
+        </div>
+        <div class="pq-meta">
+          <div><strong>Generated:</strong> ${formatDateLong(todayISO())}</div>
+        </div>
+      </div>
+
+      ${warningHtml}
+
+      <div class="pq-section">
+        <h3>Cut List</h3>
+        <table class="pq-table">
+          <thead><tr><th>Part</th><th>Length</th><th>Qty</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+
+      <div class="pq-section">
+        <h3>Palings Required</h3>
+        <div>${result.palingsRequired} ${result.palingsRequired === 1 ? 'paling' : 'palings'} (1800mm stock, 3mm kerf)</div>
+        ${offcutText ? `<div>Offcuts: ${offcutText}</div>` : ''}
+      </div>
+
+      <div class="pq-section">
+        <h3>Build Record</h3>
+        <table class="pq-table doc-record-table">
+          <thead><tr><th></th><th>Planned</th><th>Actual</th></tr></thead>
+          <tbody>
+            <tr><td>Cutting time</td><td class="doc-blank-cell"></td><td class="doc-blank-cell"></td></tr>
+            <tr><td>Assembly time</td><td class="doc-blank-cell"></td><td class="doc-blank-cell"></td></tr>
+            <tr><td>Total labour</td><td class="doc-blank-cell"></td><td class="doc-blank-cell"></td></tr>
+          </tbody>
+        </table>
+        <div class="doc-notes-label">Design changes</div>
+        <div class="doc-notes-line"></div>
+        <div class="doc-notes-line"></div>
+        <div class="doc-notes-line"></div>
+      </div>
+
+      <div class="pq-footer">
+        <p class="pq-source-note">Materials sourced via Pete &amp; Meeks Handy Services (ABN 37 791 164 057)</p>
+      </div>
+    `;
+
+    el('print-quote').innerHTML = '';
+    window.print();
+  }
+
+  function bindDocumentsEvents() {
+    el('documentsTemplate').addEventListener('change', renderDocumentsPreview);
+    el('btnPrintDocument').addEventListener('click', printDocument);
+  }
+
+  // ---------------------------------------------------------------------
   // Tabs
   // ---------------------------------------------------------------------
 
@@ -1046,8 +1164,10 @@
     bindQuoteEvents();
     bindSavedEvents();
     bindSettingsEvents();
+    bindDocumentsEvents();
 
-    renderTemplateOptions();
+    populateTemplateSelect('cutListTemplate');
+    populateTemplateSelect('documentsTemplate');
     renderQuoteForm();
     renderSavedList();
     renderSettingsForm();

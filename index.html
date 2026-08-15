@@ -17,6 +17,7 @@
   <nav class="tabs" role="tablist">
     <button type="button" class="tab-btn active" data-tab="quote" role="tab" aria-selected="true">Quote</button>
     <button type="button" class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved Quotes</button>
+    <button type="button" class="tab-btn" data-tab="documents" role="tab" aria-selected="false">Documents</button>
     <button type="button" class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
   </nav>
 </header>
@@ -177,6 +178,22 @@
     </div>
   </section>
 
+  <!-- ===================== DOCUMENTS TAB ===================== -->
+  <section id="tab-documents" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Build Pack</h2>
+      <p class="hint">Pick a product to generate a printable cut list and a blank build record for the workshop. Build packs aren't saved in the app — print or save as PDF to keep a copy.</p>
+      <div class="field">
+        <label for="documentsTemplate">Product</label>
+        <select id="documentsTemplate"></select>
+      </div>
+      <div id="documentsPreview"></div>
+      <div class="action-row">
+        <button type="button" id="btnPrintDocument" class="btn btn-secondary" disabled>Print / Save as PDF</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== SETTINGS TAB ===================== -->
   <section id="tab-settings" class="tab-panel" role="tabpanel">
     <div class="card">
@@ -246,6 +263,9 @@
 
 <!-- Printable customer-facing quote (hidden on screen, shown only when printing) -->
 <div id="print-quote" class="print-only"></div>
+
+<!-- Printable workshop build pack (hidden on screen, shown only when printing) -->
+<div id="print-document" class="print-only"></div>
 
 <script src="js/app.js"></script>
 </body>

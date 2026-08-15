@@ -933,6 +933,7 @@
       const ok = confirm(`Replace the current cut list with ${template.id} — ${template.name}? This can't be undone.`);
       if (!ok) {
         renderTemplateNotice();
+        showCutListTemplateStatus('Cancelled — cut list and item description were NOT changed.', '#6b6259');
         return;
       }
     }
@@ -947,7 +948,14 @@
     renderSummary();
     renderTemplateNotice();
     renderItemDescriptionFields();
+    showCutListTemplateStatus(`✓ Item description auto-filled below (Customer Quote Description card) — scroll down to review before printing or emailing.`);
     saveDraft();
+  }
+
+  function showCutListTemplateStatus(message, color) {
+    const status = el('cutListTemplateStatus');
+    status.style.color = color || '#2f6f4e';
+    status.textContent = message;
   }
 
   function renderCutListRows() {
@@ -1017,6 +1025,7 @@
     renderItemDescriptionFields();
     renderCutListRows();
     renderTemplateNotice();
+    el('cutListTemplateStatus').textContent = '';
     refreshCutList();
     renderBom();
     renderLabourOverhead();
@@ -1055,7 +1064,11 @@
     el('clientContact').addEventListener('input', e => { state.current.client.contact = e.target.value; saveDraft(); });
     el('clientNotes').addEventListener('input', e => { state.current.client.notes = e.target.value; saveDraft(); });
 
-    el('itemDescription').addEventListener('input', e => { state.current.itemDescription = e.target.value; saveDraft(); });
+    el('itemDescription').addEventListener('input', e => {
+      state.current.itemDescription = e.target.value;
+      el('cutListTemplateStatus').textContent = '';
+      saveDraft();
+    });
     el('customerNote').addEventListener('input', e => { state.current.customerNote = e.target.value; saveDraft(); });
 
     el('bomBody').addEventListener('input', e => {

@@ -25,6 +25,12 @@ static web app that runs entirely in the browser.
   time, total labour, and a space for design-change notes) to fill in by
   hand. Print or save as PDF the same way as a quote. Build packs aren't
   saved in the app — print or export the PDF to keep a copy.
+- **Mark as built** — once you've actually cut and assembled a build, click
+  "Mark as built — deduct stock" on its build pack to deduct exactly what it
+  used from Stock (same part-by-part matching as the Shopping List/"What Can
+  I Build?"). Shows a confirmation summary of what's about to be deducted
+  before committing. Only Stock quantities change — the quote and build
+  pack are never touched.
 - **Labour & overhead** — labour hours × hourly rate, plus a configurable
   workshop overhead percentage applied on top of direct costs (materials +
   labour).

@@ -504,7 +504,7 @@
       const length = Number(entry.length) || 0;
       const qty = Math.max(0, Math.floor(Number(entry.qty) || 0));
       if (length <= 0 || qty <= 0) return;
-      for (let i = 0; i < qty; i++) bins.push({ length, used: 0, items: [] });
+      for (let i = 0; i < qty; i++) bins.push({ length, used: 0, items: [], entryId: entry.id });
     });
 
     const shortfallRows = [];
@@ -531,7 +531,18 @@
 
     const shortfallPack = packCutList(shortfallRows);
 
-    return { perRow, shortfallPack };
+    // How many physical stock pieces (grouped by the stock entry they came
+    // from) actually got at least one part cut from them - used to deduct
+    // stock when a build is marked complete, since a physical piece is
+    // "used up" as stock once anything's been cut from it.
+    const usedBinsByEntry = {};
+    bins.forEach(bin => {
+      if (bin.items.length > 0) {
+        usedBinsByEntry[bin.entryId] = (usedBinsByEntry[bin.entryId] || 0) + 1;
+      }
+    });
+
+    return { perRow, shortfallPack, usedBinsByEntry };
   }
 
   function parseCustomCutListText(text) {
@@ -1347,12 +1358,81 @@
     return rows;
   }
 
+  // Works out exactly which physical stock (paling pieces and simple
+  // materials) a build actually consumes, without touching the quote or
+  // build pack data - used by "Mark as built" to preview then apply a
+  // stock deduction.
+  function getStockDeductionPlan(source) {
+    const palingCheck = checkStockAgainstCutList(source.cutListRows, getPalingStockEntries());
+    const palingDeductions = getPalingStockEntries()
+      .map(entry => ({ entryId: entry.id, length: entry.length, qty: palingCheck.usedBinsByEntry[entry.id] || 0 }))
+      .filter(d => d.qty > 0);
+
+    const materialDeductions = [];
+    if (source.mode === 'quote') {
+      source.quote.bom
+        .filter(line => Number(line.qty) > 0 && line.materialId !== 'paling')
+        .forEach(line => {
+          const { fromStock } = splitStockVsBuy(line.materialId, Number(line.qty));
+          if (fromStock > 0) materialDeductions.push({ materialId: line.materialId, name: line.name, unit: line.unit, qty: fromStock });
+        });
+    } else {
+      const castorCount = getTemplateCastorCount(source.template);
+      if (castorCount > 0) {
+        const { fromStock } = splitStockVsBuy('castor', castorCount);
+        if (fromStock > 0) materialDeductions.push({ materialId: 'castor', name: 'Castors', unit: 'each', qty: fromStock });
+      }
+    }
+
+    return { palingDeductions, materialDeductions };
+  }
+
+  function describeStockDeductionPlan(plan) {
+    const byLength = {};
+    plan.palingDeductions.forEach(d => { byLength[d.length] = (byLength[d.length] || 0) + d.qty; });
+    const parts = Object.keys(byLength)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .map(length => `${byLength[length]}×${length}mm paling${byLength[length] === 1 ? '' : 's'}`);
+
+    plan.materialDeductions.forEach(d => {
+      const label = d.name.toLowerCase();
+      parts.push(d.unit && d.unit !== 'each' ? `${d.qty}${d.unit} ${label}` : `${d.qty} ${label}`);
+    });
+
+    return parts;
+  }
+
+  function applyStockDeductionPlan(plan) {
+    plan.palingDeductions.forEach(d => {
+      const entry = state.stock.find(e => e.id === d.entryId);
+      if (entry) entry.qty = Math.max(0, (Number(entry.qty) || 0) - d.qty);
+    });
+    plan.materialDeductions.forEach(d => {
+      let remaining = d.qty;
+      state.stock
+        .filter(e => (e.materialId || 'paling') === d.materialId)
+        .forEach(e => {
+          if (remaining <= 0) return;
+          const take = Math.min(remaining, Number(e.qty) || 0);
+          e.qty -= take;
+          remaining -= take;
+        });
+    });
+    state.stock = state.stock.filter(e => (Number(e.qty) || 0) > 0);
+    saveStock(state.stock);
+    renderStockTable();
+    renderStockSummary();
+  }
+
   function renderDocumentsPreview() {
     const container = el('documentsPreview');
     const printBtn = el('btnPrintDocument');
+    const markBuiltBtn = el('btnMarkAsBuilt');
     const linkedQuote = getDocumentsLinkedQuote();
     const linkedQuoteHasCutList = !!(linkedQuote && linkedQuote.cutList && linkedQuote.cutList.length > 0);
     el('documentsTemplate').disabled = linkedQuoteHasCutList;
+    el('markAsBuiltStatus').textContent = '';
 
     const source = resolveBuildPackSource(linkedQuote);
 
@@ -1360,9 +1440,13 @@
       container.innerHTML = '<p class="hint">Select a product above, or link an accepted quote that has its own cut list, to generate the build pack.</p>';
       printBtn.disabled = true;
       printBtn.title = 'Select a product or link a quote with a cut list first';
+      markBuiltBtn.disabled = true;
+      markBuiltBtn.title = printBtn.title;
       return;
     }
     printBtn.title = '';
+    markBuiltBtn.disabled = false;
+    markBuiltBtn.title = '';
 
     const result = packCutList(source.cutListRows);
     const rowsHtml = source.cutListRows
@@ -1423,6 +1507,28 @@
 
     container.innerHTML = html;
     printBtn.disabled = false;
+  }
+
+  function markAsBuilt() {
+    const linkedQuote = getDocumentsLinkedQuote();
+    const source = resolveBuildPackSource(linkedQuote);
+    const statusEl = el('markAsBuiltStatus');
+    if (!source) return;
+
+    const plan = getStockDeductionPlan(source);
+    const parts = describeStockDeductionPlan(plan);
+
+    if (!parts.length) {
+      statusEl.textContent = 'Nothing matching this build was found in Stock — no stock to deduct.';
+      return;
+    }
+
+    const confirmed = confirm(`This will use: ${parts.join(', ')} — confirm?`);
+    if (!confirmed) return;
+
+    applyStockDeductionPlan(plan);
+    renderDocumentsPreview();
+    el('markAsBuiltStatus').textContent = `Stock updated: used ${parts.join(', ')}.`;
   }
 
   function printDocument() {
@@ -1542,6 +1648,7 @@
     el('documentsTemplate').addEventListener('change', renderDocumentsPreview);
     el('documentsLinkedQuote').addEventListener('change', renderDocumentsPreview);
     el('btnPrintDocument').addEventListener('click', printDocument);
+    el('btnMarkAsBuilt').addEventListener('click', markAsBuilt);
   }
 
   // ---------------------------------------------------------------------

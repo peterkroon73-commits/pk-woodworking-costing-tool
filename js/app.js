@@ -1303,8 +1303,19 @@
     return [{ name: baseName, qty: String(buyNew), note: '' }];
   }
 
+  // The single source of truth for how a cut list's palings match up against
+  // current paling stock. Both the Shopping List display (per-part "covered
+  // by stock" tags + the "Palings to buy" total) and "Mark as built"'s
+  // deduction plan are derived from this ONE combined calculation - a part
+  // covered by an offcut and a part covered by bin-packing onto a whole
+  // paling both come out of the same pass, so nothing gets matched, shown,
+  // or deducted twice.
+  function getPalingCoverage(cutListRows) {
+    return checkStockAgainstCutList(cutListRows, getPalingStockEntries());
+  }
+
   function getPalingShoppingRows(cutListRows) {
-    const palingCheck = checkStockAgainstCutList(cutListRows, getPalingStockEntries());
+    const palingCheck = getPalingCoverage(cutListRows);
     const rows = [];
 
     palingCheck.perRow
@@ -1363,7 +1374,7 @@
   // build pack data - used by "Mark as built" to preview then apply a
   // stock deduction.
   function getStockDeductionPlan(source) {
-    const palingCheck = checkStockAgainstCutList(source.cutListRows, getPalingStockEntries());
+    const palingCheck = getPalingCoverage(source.cutListRows);
     const palingDeductions = getPalingStockEntries()
       .map(entry => ({ entryId: entry.id, length: entry.length, qty: palingCheck.usedBinsByEntry[entry.id] || 0 }))
       .filter(d => d.qty > 0);

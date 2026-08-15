@@ -53,10 +53,14 @@ static web app that runs entirely in the browser.
   rest. A **Waste Log** tracks offcuts that ended up as scrap, with a
   running dollar total.
 - **Stock-aware Shopping List** — a Documents build pack's Shopping List
-  checks your current Stock and splits each item into "from stock" and
-  "buy new" lines, so the printed list only tells you what you actually
-  need to purchase. Covers palings (matched against the cut list) and any
-  other material you've logged in Stock (e.g. castors, screws). If nothing's
+  checks your current Stock so it only tells you what you actually need to
+  purchase. For palings, each cut list part is checked individually against
+  stock (same matching logic as "What Can I Build?") and tagged "Covered by
+  stock" or "Need to buy" — an offcut can fully cover a specific small part
+  without being treated as a whole paling, and only the still-uncovered
+  parts are re-packed into a single "Palings to buy" total. Castors, screws,
+  and any other material you've logged in Stock get a simpler "from stock" /
+  "buy new" split, since those are consumed one-for-one. If nothing's
   in stock for an item, it just shows the full quantity needed, as before.
 - **Works on mobile** — responsive layout, large touch targets, and a
   sticky tabbed header for quick access to Quote / Saved Quotes / Documents /

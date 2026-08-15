@@ -530,9 +530,8 @@
     });
 
     const shortfallPack = packCutList(shortfallRows);
-    const palingsFromStock = bins.filter(bin => bin.items.length > 0).length;
 
-    return { perRow, shortfallPack, palingsFromStock };
+    return { perRow, shortfallPack };
   }
 
   function parseCustomCutListText(text) {
@@ -1293,9 +1292,35 @@
     return [{ name: baseName, qty: String(buyNew), note: '' }];
   }
 
+  function getPalingShoppingRows(cutListRows) {
+    const palingCheck = checkStockAgainstCutList(cutListRows, getPalingStockEntries());
+    const rows = [];
+
+    palingCheck.perRow
+      .filter(r => r.qtyRequired > 0)
+      .forEach(r => {
+        const short = r.qtyRequired - r.qtyCovered;
+        if (short <= 0) {
+          rows.push({ name: r.name, qty: '', note: 'Covered by stock' });
+        } else if (r.qtyCovered > 0) {
+          rows.push({ name: r.name, qty: String(short), note: `Need to buy (${r.qtyCovered} of ${r.qtyRequired} covered by stock)` });
+        } else {
+          rows.push({ name: r.name, qty: String(short), note: 'Need to buy' });
+        }
+      });
+
+    const buyCount = palingCheck.shortfallPack.palingsRequired;
+    rows.push({
+      name: 'Palings to buy',
+      qty: String(buyCount),
+      note: buyCount > 0 ? '' : 'Fully covered by current stock',
+    });
+
+    return rows;
+  }
+
   function getShoppingListRows(source) {
-    const palingCheck = checkStockAgainstCutList(source.cutListRows, getPalingStockEntries());
-    const rows = buildStockAwareRows('Palings', palingCheck.palingsFromStock, palingCheck.shortfallPack.palingsRequired);
+    const rows = getPalingShoppingRows(source.cutListRows);
 
     if (source.mode === 'quote') {
       source.quote.bom

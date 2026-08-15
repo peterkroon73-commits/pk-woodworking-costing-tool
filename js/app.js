@@ -448,6 +448,30 @@
     return (Number(length) / CUT_STOCK_LENGTH) * getPalingUnitPrice() * (Number(qty) || 0);
   }
 
+  // Values any stock entry: length-prorated for palings, straight qty x unit
+  // price for anything else (castors, screws, brads, glue, or a custom
+  // material added to the Price List).
+  function stockEntryValue(entry) {
+    const materialId = entry.materialId || 'paling';
+    if (materialId === 'paling') return stockPieceValue(entry.length, entry.qty);
+    const material = state.settings.materials.find(m => m.id === materialId);
+    const unitPrice = material ? Number(material.unitPrice) || 0 : 0;
+    return unitPrice * (Number(entry.qty) || 0);
+  }
+
+  function getMaterialStockQty(materialId) {
+    return state.stock
+      .filter(e => (e.materialId || 'paling') === materialId)
+      .reduce((sum, e) => sum + (Number(e.qty) || 0), 0);
+  }
+
+  // Splits a required quantity of a simple (non-cut) material into what's
+  // already on hand vs. what still needs buying.
+  function splitStockVsBuy(materialId, required) {
+    const stockQty = getMaterialStockQty(materialId);
+    return { fromStock: Math.min(required, stockQty), buyNew: Math.max(0, required - stockQty) };
+  }
+
   function daysInStock(dateAddedISO) {
     const added = new Date(dateAddedISO + 'T00:00:00');
     const today = new Date(todayISO() + 'T00:00:00');
@@ -506,8 +530,9 @@
     });
 
     const shortfallPack = packCutList(shortfallRows);
+    const palingsFromStock = bins.filter(bin => bin.items.length > 0).length;
 
-    return { perRow, shortfallPack };
+    return { perRow, shortfallPack, palingsFromStock };
   }
 
   function parseCustomCutListText(text) {
@@ -1112,6 +1137,8 @@
     saveSettings(state.settings);
     renderBom();
     renderSummary();
+    populateStockMaterialSelect();
+    renderStockTable();
     const status = el('materialsSaveStatus');
     status.style.color = '#2f6f4e';
     status.textContent = 'Price list saved.';
@@ -1253,15 +1280,38 @@
     return null;
   }
 
-  function getShoppingListRows(source, palingsRequired) {
-    if (source.mode === 'quote') {
-      return source.quote.bom
-        .filter(line => Number(line.qty) > 0)
-        .map(line => ({ name: line.name, qty: String(Number(line.qty)), note: '' }));
+  // Renders a stock-aware pair of shopping list lines for a simple (non-cut)
+  // quantity: "X — from stock" / "X — buy new" when some stock covers it,
+  // or a single plain "X" line for the full amount when none does (same as
+  // if stock-awareness didn't exist).
+  function buildStockAwareRows(baseName, fromStock, buyNew) {
+    if (fromStock > 0) {
+      const rows = [{ name: `${baseName} — from stock`, qty: String(fromStock), note: '' }];
+      if (buyNew > 0) rows.push({ name: `${baseName} — buy new`, qty: String(buyNew), note: '' });
+      return rows;
     }
+    return [{ name: baseName, qty: String(buyNew), note: '' }];
+  }
+
+  function getShoppingListRows(source) {
+    const palingCheck = checkStockAgainstCutList(source.cutListRows, getPalingStockEntries());
+    const rows = buildStockAwareRows('Palings', palingCheck.palingsFromStock, palingCheck.shortfallPack.palingsRequired);
+
+    if (source.mode === 'quote') {
+      source.quote.bom
+        .filter(line => Number(line.qty) > 0 && line.materialId !== 'paling')
+        .forEach(line => {
+          const { fromStock, buyNew } = splitStockVsBuy(line.materialId, Number(line.qty));
+          rows.push(...buildStockAwareRows(line.name, fromStock, buyNew));
+        });
+      return rows;
+    }
+
     const castorCount = getTemplateCastorCount(source.template);
-    const rows = [{ name: 'Palings', qty: String(palingsRequired), note: '' }];
-    if (castorCount > 0) rows.push({ name: 'Castors', qty: String(castorCount), note: '' });
+    if (castorCount > 0) {
+      const { fromStock, buyNew } = splitStockVsBuy('castor', castorCount);
+      rows.push(...buildStockAwareRows('Castors', fromStock, buyNew));
+    }
     rows.push(
       { name: 'Screws', qty: '', note: '' },
       { name: 'Brads', qty: '', note: '' },
@@ -1304,7 +1354,7 @@
       ? `<div class="template-notice info">Using the cut list &amp; materials from quote ${escapeHtml(linkedQuote.quoteNumber)} — the Product dropdown is disabled while a quote with its own cut list is linked.</div>`
       : '';
 
-    const shoppingRowsHtml = getShoppingListRows(source, result.palingsRequired)
+    const shoppingRowsHtml = getShoppingListRows(source)
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
       .join('');
 
@@ -1374,7 +1424,7 @@
       ? `<p class="doc-job-header">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
       : '';
 
-    const shoppingRowsHtml = getShoppingListRows(source, result.palingsRequired)
+    const shoppingRowsHtml = getShoppingListRows(source)
       .map(r => `<tr><td class="doc-checkbox"></td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.note)}</td></tr>`)
       .join('');
 
@@ -1473,14 +1523,22 @@
   // Stock tab
   // ---------------------------------------------------------------------
 
+  function getStockMaterialName(materialId) {
+    const id = materialId || 'paling';
+    const material = state.settings.materials.find(m => m.id === id);
+    return material ? material.name : id;
+  }
+
   function renderStockTable() {
     const tbody = el('stockBody');
     tbody.innerHTML = '';
     state.stock.forEach((entry, idx) => {
       const tr = document.createElement('tr');
-      const value = stockPieceValue(entry.length, entry.qty);
+      const isPaling = (entry.materialId || 'paling') === 'paling';
+      const value = stockEntryValue(entry);
       tr.innerHTML = `
-        <td>${Number(entry.length)}mm</td>
+        <td>${escapeHtml(getStockMaterialName(entry.materialId))}</td>
+        <td>${isPaling ? Number(entry.length) + 'mm' : '—'}</td>
         <td>${Number(entry.qty)}</td>
         <td>${formatDateLong(entry.dateAdded)}</td>
         <td>${daysInStock(entry.dateAdded)}</td>
@@ -1499,11 +1557,12 @@
       return;
     }
     const totalPieces = state.stock.reduce((sum, e) => sum + (Number(e.qty) || 0), 0);
-    const totalLinearMm = state.stock.reduce((sum, e) => sum + (Number(e.length) || 0) * (Number(e.qty) || 0), 0);
-    const totalValue = state.stock.reduce((sum, e) => sum + stockPieceValue(e.length, e.qty), 0);
+    const palingEntries = state.stock.filter(e => (e.materialId || 'paling') === 'paling');
+    const totalLinearMm = palingEntries.reduce((sum, e) => sum + (Number(e.length) || 0) * (Number(e.qty) || 0), 0);
+    const totalValue = state.stock.reduce((sum, e) => sum + stockEntryValue(e), 0);
     container.innerHTML = `
       <div class="cutlist-summary"><strong>${totalPieces}</strong> total pieces</div>
-      <div class="cutlist-offcuts">Total linear metres: ${(totalLinearMm / 1000).toFixed(2)}m</div>
+      <div class="cutlist-offcuts">Total linear metres (palings): ${(totalLinearMm / 1000).toFixed(2)}m</div>
       <div class="cutlist-offcuts">Estimated value: ${money(totalValue)}</div>
     `;
   }
@@ -1562,13 +1621,34 @@
     container.innerHTML = `<div class="cutlist-summary">Running waste total: <strong>${money(total)}</strong></div>`;
   }
 
+  function populateStockMaterialSelect() {
+    const select = el('stockMaterial');
+    select.innerHTML = state.settings.materials
+      .map(m => `<option value="${escapeAttr(m.id)}">${escapeHtml(m.name)}</option>`)
+      .join('');
+    updateStockLengthFieldVisibility();
+  }
+
+  function updateStockLengthFieldVisibility() {
+    const isPaling = el('stockMaterial').value === 'paling';
+    el('stockLengthField').style.display = isPaling ? '' : 'none';
+  }
+
+  function getPalingStockEntries() {
+    return state.stock.filter(e => (e.materialId || 'paling') === 'paling');
+  }
+
   function bindStockEvents() {
+    el('stockMaterial').addEventListener('change', updateStockLengthFieldVisibility);
+
     el('btnAddStock').addEventListener('click', () => {
-      const length = Number(el('stockLength').value) || 0;
+      const materialId = el('stockMaterial').value || 'paling';
+      const isPaling = materialId === 'paling';
+      const length = isPaling ? Number(el('stockLength').value) || 0 : 0;
       const qty = Number(el('stockQty').value) || 0;
       const dateAdded = el('stockDate').value || todayISO();
-      if (length <= 0 || qty <= 0) return;
-      state.stock.push({ id: uid(), length, qty, dateAdded });
+      if ((isPaling && length <= 0) || qty <= 0) return;
+      state.stock.push({ id: uid(), materialId, length, qty, dateAdded });
       saveStock(state.stock);
       renderStockTable();
       el('stockLength').value = '';
@@ -1596,7 +1676,7 @@
         el('stockCheckResult').innerHTML = '<p class="hint">Load a product or paste a cut list first.</p>';
         return;
       }
-      renderStockCheckResult(checkStockAgainstCutList(rows, state.stock));
+      renderStockCheckResult(checkStockAgainstCutList(rows, getPalingStockEntries()));
     });
 
     el('btnAddWaste').addEventListener('click', () => {
@@ -1667,6 +1747,7 @@
     populateTemplateSelect('documentsTemplate');
     populateTemplateSelect('stockCheckTemplate');
     populateAcceptedQuoteSelect();
+    populateStockMaterialSelect();
     el('stockDate').value = todayISO();
     renderQuoteForm();
     renderSavedList();

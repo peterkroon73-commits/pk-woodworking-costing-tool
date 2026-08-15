@@ -17,12 +17,14 @@ static web app that runs entirely in the browser.
   or custom one-off items per quote). In-progress quotes always track the
   current Settings price list; once a quote is saved, its prices lock in as
   a historical record.
-- **Documents tab** — pick a product template and generate a printable
-  workshop build pack: the same cut list + paling/offcut calculation, plus a
-  blank "Build Record" (planned vs. actual cutting time, assembly time,
-  total labour, and a space for design-change notes) to fill in by hand.
-  Print or save as PDF the same way as a quote. Build packs aren't saved in
-  the app — print or export the PDF to keep a copy.
+- **Documents tab** — pick a product template, or link an accepted quote to
+  pull its own custom cut list and materials, and generate a printable
+  workshop build pack: the cut list + paling/offcut calculation, a
+  stock-aware **Shopping List** (see below), a Quality Inspection checklist,
+  and a blank "Build Record" (planned vs. actual cutting time, assembly
+  time, total labour, and a space for design-change notes) to fill in by
+  hand. Print or save as PDF the same way as a quote. Build packs aren't
+  saved in the app — print or export the PDF to keep a copy.
 - **Labour & overhead** — labour hours × hourly rate, plus a configurable
   workshop overhead percentage applied on top of direct costs (materials +
   labour).
@@ -41,13 +43,21 @@ static web app that runs entirely in the browser.
 - **Saved quotes** — every saved quote is stored on-device (localStorage) and
   searchable by quote number, client name, or status. Open, duplicate, or
   delete past quotes at any time.
-- **Stock tab** — log paling/offcut stock on hand (length, quantity, date
-  added) with auto-calculated total pieces, total linear metres, estimated
-  value, and days in stock for each entry. **What Can I Build?** checks a
-  product template (or a pasted cut list) against current stock — using the
-  same bin-packing engine as the Cut List — to show what's covered and how
-  many fresh palings you'd need to buy for the rest. A **Waste Log** tracks
-  offcuts that ended up as scrap, with a running dollar total.
+- **Stock tab** — log stock on hand for any material in your Price List
+  (palings/offcuts by length and quantity, or simple countable items like
+  castors and screws), with auto-calculated total pieces, total linear
+  metres, estimated value, and days in stock for each entry. **What Can I
+  Build?** checks a product template (or a pasted cut list) against current
+  paling stock — using the same bin-packing engine as the Cut List — to
+  show what's covered and how many fresh palings you'd need to buy for the
+  rest. A **Waste Log** tracks offcuts that ended up as scrap, with a
+  running dollar total.
+- **Stock-aware Shopping List** — a Documents build pack's Shopping List
+  checks your current Stock and splits each item into "from stock" and
+  "buy new" lines, so the printed list only tells you what you actually
+  need to purchase. Covers palings (matched against the cut list) and any
+  other material you've logged in Stock (e.g. castors, screws). If nothing's
+  in stock for an item, it just shows the full quantity needed, as before.
 - **Works on mobile** — responsive layout, large touch targets, and a
   sticky tabbed header for quick access to Quote / Saved Quotes / Documents /
   Stock / Settings.

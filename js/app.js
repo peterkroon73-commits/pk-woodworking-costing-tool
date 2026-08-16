@@ -38,8 +38,25 @@
     return settings;
   }
 
-  const CUT_STOCK_LENGTH = 1800; // mm, standard paling length
-  const CUT_KERF = 3;            // mm, saw-cut allowance between pieces on the same paling
+  const CUT_STOCK_LENGTH = 1800;   // mm, standard paling length
+  const CUT_KERF = 3;              // mm, saw-cut allowance between pieces on the same stock length
+  const FRAMING_STOCK_LENGTH = 2400; // mm, 70x35mm H3 outdoor framing pine stock length (K-series parts)
+
+  // Framing-stock parts (K1-K5 etc.) are cut from 70x35mm framing pine, not
+  // 1800mm palings - detected by the "K" part-code prefix so they can be
+  // pulled out of the ordinary paling calculation and packed separately.
+  // Never feed a mixed list of paling + framing rows into one packCutList
+  // call - the two stock lengths must never be combined into one figure.
+  function isFramingPart(name) {
+    return /^K\d/.test((name || '').trim());
+  }
+
+  function splitCutListByStockType(rows) {
+    const paling = [];
+    const framing = [];
+    (rows || []).forEach(row => (isFramingPart(row.name) ? framing : paling).push(row));
+    return { paling, framing };
+  }
 
   const PKP001_ROWS = [
     { name: 'A1', length: 500, qty: 8 },
@@ -80,15 +97,23 @@
       id: 'PKP-003',
       name: 'Planter Bench',
       category: 'Planters',
-      warning: 'Prototype only — confirm against physical prototype before use. Uses mixed 100mm paling + 70×35mm framing stock.',
+      warning: 'Prototype only — confirm against physical prototype before use. Uses mixed paling + 70×35mm framing stock (K-series parts) — see the separate framing-stock figure below the cut list.',
       // No locked size yet - buildInvoiceDescription() falls back to a
       // "confirm before quoting" line instead of a fabricated dimension.
       rows: [
-        { name: 'A1-style leg', length: 650, qty: 16 },
-        { name: 'Wall panel', length: 420, qty: 24 },
-        { name: 'Wall panel', length: 470, qty: 24 },
-        { name: 'Seat slat', length: 500, qty: 8 },
-        { name: 'Top cap', length: 550, qty: 4 },
+        { name: 'A1 (corner wrap piece)', length: 650, qty: 16 },
+        { name: 'B1 (wall panel, front/back)', length: 420, qty: 24 },
+        { name: 'B2 (wall panel, outer-side/seat-facing)', length: 470, qty: 24 },
+        { name: 'C1 (false-floor slat)', length: 465, qty: 8 },
+        { name: 'E1 (top cap, front/back)', length: 550, qty: 4 },
+        { name: 'E2 (top cap, sides)', length: 400, qty: 4 },
+        { name: 'K1 (structural leg, 70x35mm stock)', length: 365, qty: 8 },
+        { name: 'K2 (long seat rail, 70x35mm stock)', length: 1768, qty: 3 },
+        { name: 'K3 (cross-member, 70x35mm stock)', length: 350, qty: 6 },
+        { name: 'K4 (cross-member, 70x35mm stock)', length: 330, qty: 4 },
+        { name: 'K5 (45° support wedge, 70x35mm stock, cut as 6 blanks at 70mm then split diagonally for 12 finished wedges)', length: 70, qty: 6 },
+        { name: 'L1 (seat front/rear board)', length: 900, qty: 2 },
+        { name: 'L2 (seat cross slat)', length: 500, qty: 8 },
       ],
     },
     {
@@ -585,6 +610,7 @@
   };
 
   let lastCutListResult = { palingsRequired: 0, offcuts: [], totalOffcut: 0, warnings: [] };
+  let lastFramingResult = { palingsRequired: 0, offcuts: [], totalOffcut: 0, warnings: [] };
 
   // Working copy of the material price list edited in Settings; only written
   // back to state.settings (and localStorage) when "Save Price List" is clicked.
@@ -676,20 +702,24 @@
   }
 
   // First-fit-decreasing bin packing: sorts pieces largest-first and drops each
-  // into the first paling with room, opening a new paling when none fits.
-  function packCutList(cutList) {
+  // into the first stock length with room, opening a new one when none fits.
+  // stockLength defaults to the standard 1800mm paling; pass
+  // FRAMING_STOCK_LENGTH to pack framing-stock parts instead - never pass a
+  // mixed paling+framing list through a single call.
+  function packCutList(cutList, stockLength) {
+    const length = stockLength || CUT_STOCK_LENGTH;
     const pieces = [];
     const warnings = [];
 
     (cutList || []).forEach(row => {
-      const length = Number(row.length) || 0;
+      const pieceLength = Number(row.length) || 0;
       const qty = Math.max(0, Math.floor(Number(row.qty) || 0));
-      if (length <= 0 || qty <= 0) return;
-      if (length > CUT_STOCK_LENGTH) {
-        warnings.push(`"${row.name || 'Unnamed part'}" at ${length}mm is longer than a ${CUT_STOCK_LENGTH}mm paling and can't be cut from one.`);
+      if (pieceLength <= 0 || qty <= 0) return;
+      if (pieceLength > length) {
+        warnings.push(`"${row.name || 'Unnamed part'}" at ${pieceLength}mm is longer than a ${length}mm stock length and can't be cut from one.`);
         return;
       }
-      for (let i = 0; i < qty; i++) pieces.push({ length, name: row.name || 'Unnamed part' });
+      for (let i = 0; i < qty; i++) pieces.push({ length: pieceLength, name: row.name || 'Unnamed part' });
     });
 
     pieces.sort((a, b) => b.length - a.length);
@@ -698,7 +728,7 @@
     pieces.forEach(piece => {
       let target = bins.find(bin => {
         const cost = bin.items.length === 0 ? piece.length : piece.length + CUT_KERF;
-        return bin.used + cost <= CUT_STOCK_LENGTH;
+        return bin.used + cost <= length;
       });
       if (!target) {
         target = { used: 0, items: [] };
@@ -709,10 +739,47 @@
       target.items.push(piece);
     });
 
-    const offcuts = bins.map(bin => CUT_STOCK_LENGTH - bin.used);
+    const offcuts = bins.map(bin => length - bin.used);
     const totalOffcut = offcuts.reduce((a, b) => a + b, 0);
 
     return { palingsRequired: bins.length, offcuts, totalOffcut, warnings };
+  }
+
+  // Splits a cut list into paling parts and framing (K-series) parts and
+  // packs each against its own stock length - the two are never combined
+  // into a single calculation.
+  function packCutListByStockType(rows) {
+    const { paling, framing } = splitCutListByStockType(rows);
+    return {
+      palingResult: packCutList(paling),
+      framingResult: packCutList(framing, FRAMING_STOCK_LENGTH),
+    };
+  }
+
+  // Renders the "N palings required" summary, plus a second "N framing
+  // lengths required" summary underneath when the cut list has any
+  // K-series parts - shared by the Quote tab, Documents preview, and print.
+  function cutListResultHtml(palingResult, framingResult, opts) {
+    const cutlistClass = (opts && opts.summaryClass) || 'cutlist-summary';
+    const offcutClass = (opts && opts.offcutClass) || 'cutlist-offcuts';
+    let html = '';
+    if (palingResult.palingsRequired > 0) {
+      const label = palingResult.palingsRequired === 1 ? 'paling' : 'palings';
+      html += `<div class="${cutlistClass}"><strong>${palingResult.palingsRequired}</strong> ${label} required <span class="hint">(1800mm stock, 3mm kerf)</span></div>`;
+      if (palingResult.offcuts.length) {
+        const offcutList = palingResult.offcuts.map(o => o + 'mm').join(', ');
+        html += `<div class="${offcutClass}">Offcuts: ${offcutList} <span class="hint">(${palingResult.totalOffcut}mm total reusable)</span></div>`;
+      }
+    }
+    if (framingResult && framingResult.palingsRequired > 0) {
+      const label = framingResult.palingsRequired === 1 ? 'length' : 'lengths';
+      html += `<div class="${cutlistClass}"><strong>${framingResult.palingsRequired}</strong> ${label} of 2400mm 70×35mm framing required <span class="hint">(3mm kerf)</span></div>`;
+      if (framingResult.offcuts.length) {
+        const offcutList = framingResult.offcuts.map(o => o + 'mm').join(', ');
+        html += `<div class="${offcutClass}">Framing offcuts: ${offcutList} <span class="hint">(${framingResult.totalOffcut}mm total reusable)</span></div>`;
+      }
+    }
+    return html;
   }
 
   function getPalingUnitPrice() {
@@ -974,22 +1041,17 @@
   }
 
   function refreshCutList() {
-    lastCutListResult = packCutList(state.current.cutList);
+    const { palingResult, framingResult } = packCutListByStockType(state.current.cutList);
+    lastCutListResult = palingResult;
+    lastFramingResult = framingResult;
 
     const container = el('cutListResult');
-    if (lastCutListResult.palingsRequired === 0 && lastCutListResult.warnings.length === 0) {
+    const allWarnings = [...palingResult.warnings, ...framingResult.warnings];
+    if (palingResult.palingsRequired === 0 && framingResult.palingsRequired === 0 && allWarnings.length === 0) {
       container.innerHTML = '<p class="hint">Add cut list items to calculate palings required.</p>';
     } else {
-      let html = '';
-      if (lastCutListResult.palingsRequired > 0) {
-        const label = lastCutListResult.palingsRequired === 1 ? 'paling' : 'palings';
-        html += `<div class="cutlist-summary"><strong>${lastCutListResult.palingsRequired}</strong> ${label} required <span class="hint">(1800mm stock, 3mm kerf)</span></div>`;
-        if (lastCutListResult.offcuts.length) {
-          const offcutList = lastCutListResult.offcuts.map(o => o + 'mm').join(', ');
-          html += `<div class="cutlist-offcuts">Offcuts: ${offcutList} <span class="hint">(${lastCutListResult.totalOffcut}mm total reusable)</span></div>`;
-        }
-      }
-      lastCutListResult.warnings.forEach(w => {
+      let html = cutListResultHtml(palingResult, framingResult);
+      allWarnings.forEach(w => {
         html += `<div class="cutlist-warning">${escapeHtml(w)}</div>`;
       });
       container.innerHTML = html;
@@ -1183,7 +1245,7 @@
 
   function buildCostingSummaryText(quote) {
     const t = computeTotals(quote);
-    const cutResult = packCutList(quote.cutList);
+    const { palingResult, framingResult } = packCutListByStockType(quote.cutList);
 
     const quoteNo = quote.quoteNumber || previewQuoteNumber() + ' (draft)';
     const headerLines = [
@@ -1198,10 +1260,17 @@
     );
     const cutListText = cutListLines.length ? cutListLines.join('\n') : '(no items)';
 
-    const palingsLines = [`Palings required: ${cutResult.palingsRequired} (1800mm stock, 3mm kerf)`];
-    if (cutResult.offcuts.length) {
-      const offcutList = cutResult.offcuts.map(o => o + 'mm').join(', ');
-      palingsLines.push(`Offcuts: ${offcutList} (${cutResult.totalOffcut}mm total reusable)`);
+    const palingsLines = [`Palings required: ${palingResult.palingsRequired} (1800mm stock, 3mm kerf)`];
+    if (palingResult.offcuts.length) {
+      const offcutList = palingResult.offcuts.map(o => o + 'mm').join(', ');
+      palingsLines.push(`Offcuts: ${offcutList} (${palingResult.totalOffcut}mm total reusable)`);
+    }
+    if (framingResult.palingsRequired > 0) {
+      palingsLines.push(`Framing stock required: ${framingResult.palingsRequired} lengths of 2400mm 70×35mm (3mm kerf)`);
+      if (framingResult.offcuts.length) {
+        const framingOffcutList = framingResult.offcuts.map(o => o + 'mm').join(', ');
+        palingsLines.push(`Framing offcuts: ${framingOffcutList} (${framingResult.totalOffcut}mm total reusable)`);
+      }
     }
 
     const bomLines = quote.bom.filter(line => Number(line.qty) > 0);
@@ -1699,7 +1768,10 @@
   // paling both come out of the same pass, so nothing gets matched, shown,
   // or deducted twice.
   function getPalingCoverage(cutListRows) {
-    return checkStockAgainstCutList(cutListRows, getPalingStockEntries());
+    // Framing-stock (K-series) parts are a different material entirely -
+    // never matched against paling stock or counted toward "palings to buy".
+    const { paling } = splitCutListByStockType(cutListRows);
+    return checkStockAgainstCutList(paling, getPalingStockEntries());
   }
 
   function getPalingShoppingRows(cutListRows) {
@@ -1847,13 +1919,10 @@
     markBuiltBtn.disabled = false;
     markBuiltBtn.title = '';
 
-    const result = packCutList(source.cutListRows);
+    const { palingResult, framingResult } = packCutListByStockType(source.cutListRows);
     const rowsHtml = source.cutListRows
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
       .join('');
-    const offcutText = result.offcuts.length
-      ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
-      : '';
 
     const jobHeaderHtml = linkedQuote
       ? `<p class="doc-job-header-preview">Customer: ${escapeHtml(linkedQuote.client.name || '(no client name)')} — Quote ${escapeHtml(linkedQuote.quoteNumber)} — ${formatDateLong(linkedQuote.date)}</p>`
@@ -1878,8 +1947,7 @@
         </table>
       </div>
       <div class="cutlist-result">
-        <div class="cutlist-summary"><strong>${result.palingsRequired}</strong> ${result.palingsRequired === 1 ? 'paling' : 'palings'} required <span class="hint">(1800mm stock, 3mm kerf)</span></div>
-        ${offcutText ? `<div class="cutlist-offcuts">Offcuts: ${offcutText}</div>` : ''}
+        ${cutListResultHtml(palingResult, framingResult)}
       </div>
     `;
     if (source.mode === 'template' && source.template.warning) {
@@ -1887,7 +1955,7 @@
     } else if (source.mode === 'template' && source.template.note) {
       html += `<div class="template-notice info">${escapeHtml(source.template.note)}</div>`;
     }
-    result.warnings.forEach(w => {
+    [...palingResult.warnings, ...framingResult.warnings].forEach(w => {
       html += `<div class="template-notice warning">⚠ ${escapeHtml(w)}</div>`;
     });
 
@@ -1935,18 +2003,21 @@
     const source = resolveBuildPackSource(linkedQuote);
     if (!source) return;
 
-    const result = packCutList(source.cutListRows);
+    const { palingResult, framingResult } = packCutListByStockType(source.cutListRows);
     const rowsHtml = source.cutListRows
       .map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.length}mm</td><td>${r.qty}</td></tr>`)
       .join('');
-    const offcutText = result.offcuts.length
-      ? `${result.offcuts.map(o => o + 'mm').join(', ')} (${result.totalOffcut}mm total reusable)`
+    const palingOffcutText = palingResult.offcuts.length
+      ? `${palingResult.offcuts.map(o => o + 'mm').join(', ')} (${palingResult.totalOffcut}mm total reusable)`
+      : '';
+    const framingOffcutText = framingResult.offcuts.length
+      ? `${framingResult.offcuts.map(o => o + 'mm').join(', ')} (${framingResult.totalOffcut}mm total reusable)`
       : '';
     let warningHtml = '';
     if (source.mode === 'template' && source.template.warning) {
       warningHtml += `<p class="pq-warning">⚠ ${escapeHtml(source.template.warning)}</p>`;
     }
-    result.warnings.forEach(w => {
+    [...palingResult.warnings, ...framingResult.warnings].forEach(w => {
       warningHtml += `<p class="pq-warning">⚠ ${escapeHtml(w)}</p>`;
     });
 
@@ -1987,9 +2058,17 @@
 
       <div class="pq-section">
         <h3>Palings Required</h3>
-        <div>${result.palingsRequired} ${result.palingsRequired === 1 ? 'paling' : 'palings'} (1800mm stock, 3mm kerf)</div>
-        ${offcutText ? `<div>Offcuts: ${offcutText}</div>` : ''}
+        <div>${palingResult.palingsRequired} ${palingResult.palingsRequired === 1 ? 'paling' : 'palings'} (1800mm stock, 3mm kerf)</div>
+        ${palingOffcutText ? `<div>Offcuts: ${palingOffcutText}</div>` : ''}
       </div>
+
+      ${framingResult.palingsRequired > 0 ? `
+      <div class="pq-section">
+        <h3>Framing Stock Required</h3>
+        <div>${framingResult.palingsRequired} ${framingResult.palingsRequired === 1 ? 'length' : 'lengths'} of 2400mm 70×35mm framing (3mm kerf)</div>
+        ${framingOffcutText ? `<div>Offcuts: ${framingOffcutText}</div>` : ''}
+      </div>
+      ` : ''}
 
       <div class="pq-section">
         <h3>Build Record</h3>
@@ -2098,7 +2177,7 @@
     `;
   }
 
-  function renderStockCheckResult(result) {
+  function renderStockCheckResult(result, hasFramingParts) {
     const container = el('stockCheckResult');
     const rowsHtml = result.perRow
       .map(r => {
@@ -2107,7 +2186,11 @@
       })
       .join('');
 
-    let html = `
+    let html = '';
+    if (hasFramingParts) {
+      html += `<div class="template-notice info">This cut list includes 70×35mm framing parts (K-series) — Stock currently only tracks palings, so those aren't included below.</div>`;
+    }
+    html += `
       <div class="table-scroll">
         <table class="bom-table">
           <thead><tr><th>Part</th><th>Required</th><th>From stock</th><th>Short</th></tr></thead>
@@ -2207,7 +2290,8 @@
         el('stockCheckResult').innerHTML = '<p class="hint">Load a product or paste a cut list first.</p>';
         return;
       }
-      renderStockCheckResult(checkStockAgainstCutList(rows, getPalingStockEntries()));
+      const { framing } = splitCutListByStockType(rows);
+      renderStockCheckResult(getPalingCoverage(rows), framing.length > 0);
     });
 
     el('btnAddWaste').addEventListener('click', () => {

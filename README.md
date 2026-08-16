@@ -12,6 +12,12 @@ static web app that runs entirely in the browser.
   what offcuts you'll have left over. Load a preset product from **Load
   template** to skip manual entry, or build a custom list from scratch.
   The calculated paling count auto-fills into the Bill of Materials below.
+  Parts named with a "K" code (e.g. "K1 (...)") are treated as 70×35mm
+  framing stock and packed separately against 2400mm lengths instead of
+  1800mm palings — shown as its own "X lengths of 2400mm 70×35mm framing
+  required" line, never mixed into the palings figure. Currently used by
+  PKP-003 (Planter Bench). Framing stock isn't yet tracked in the Stock tab
+  or Shopping List — those still cover palings and simple materials only.
 - **Bill of materials panel** — pick quantities against a per-unit price list
   (palings, castors, screws, brads, glue by default; add your own line items
   or custom one-off items per quote). In-progress quotes always track the

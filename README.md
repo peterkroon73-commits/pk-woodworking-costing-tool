@@ -16,14 +16,19 @@ static web app that runs entirely in the browser.
   framing stock and packed separately against 2400mm lengths instead of
   1800mm palings — shown as its own "X lengths of 2400mm 70×35mm framing
   required" line, never mixed into the palings figure. Currently used by
-  PKP-003 (Planter Bench). The Shopping List shows the same "framing to buy"
-  total, but framing stock isn't yet tracked in the Stock tab, so there's no
+  PKP-003 (Planter Bench). The same total also auto-fills a "70×35mm
+  framing" line in the Bill of Materials below (so it's correctly included
+  in direct materials cost) and shows on the Shopping List as "framing to
+  buy" — but framing stock isn't yet tracked in the Stock tab, so there's no
   "from stock" split for it the way there is for palings.
 - **Bill of materials panel** — pick quantities against a per-unit price list
-  (palings, castors, screws, brads, glue by default; add your own line items
-  or custom one-off items per quote). In-progress quotes always track the
-  current Settings price list; once a quote is saved, its prices lock in as
-  a historical record.
+  (palings, castors, screws, brads, glue, and 70×35mm framing by default; add
+  your own line items or custom one-off items per quote). The Palings and
+  70×35mm framing quantities auto-fill (greyed out, "from cut list") from the
+  Cut List's calculations whenever a cut list is present — framing only when
+  it actually has K-series parts, otherwise it stays at zero. In-progress
+  quotes always track the current Settings price list; once a quote is
+  saved, its prices lock in as a historical record.
 - **Documents tab** — pick a product template, or link an accepted quote to
   pull its own custom cut list and materials, and generate a printable
   workshop build pack: the cut list + paling/offcut calculation, a

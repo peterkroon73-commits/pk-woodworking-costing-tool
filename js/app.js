@@ -24,6 +24,7 @@
       { id: 'screws', name: 'Screws', unit: 'each', unitPrice: 0.08 },
       { id: 'brads', name: 'Brads', unit: 'each', unitPrice: 0.05 },
       { id: 'glue', name: 'Glue', unit: 'mL', unitPrice: GLUE_PRICE_PER_ML },
+      { id: 'framing', name: '70×35mm framing', unit: 'each', unitPrice: 12.26 },
     ],
   };
 
@@ -36,6 +37,21 @@
       glue.unitPrice = GLUE_PRICE_PER_ML;
     }
     return settings;
+  }
+
+  // One-time upgrade for devices whose saved price list predates the
+  // framing-stock material - adds it (at the current default price) without
+  // touching any of the user's existing custom prices.
+  function migrateFramingMaterial(settings) {
+    if (!settings.materials.some(m => m.id === 'framing')) {
+      const defaultFraming = DEFAULT_SETTINGS.materials.find(m => m.id === 'framing');
+      settings.materials.push(structuredClone(defaultFraming));
+    }
+    return settings;
+  }
+
+  function applySettingsMigrations(settings) {
+    return migrateFramingMaterial(migrateGlueDefault(settings));
   }
 
   const CUT_STOCK_LENGTH = 1800;   // mm, standard paling length
@@ -288,7 +304,7 @@
       const raw = localStorage.getItem(STORAGE.settings);
       if (!raw) return structuredClone(DEFAULT_SETTINGS);
       const parsed = JSON.parse(raw);
-      return migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), parsed));
+      return applySettingsMigrations(Object.assign(structuredClone(DEFAULT_SETTINGS), parsed));
     } catch (e) {
       console.error('Failed to load settings', e);
       return structuredClone(DEFAULT_SETTINGS);
@@ -504,7 +520,7 @@
   }
 
   function applyCloudSnapshot(snapshot) {
-    state.settings = migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), snapshot.settings || {}));
+    state.settings = applySettingsMigrations(Object.assign(structuredClone(DEFAULT_SETTINGS), snapshot.settings || {}));
     state.quotes = snapshot.quotes;
     state.stock = snapshot.stock;
     state.waste = snapshot.waste;
@@ -547,7 +563,7 @@
 
       const localSnapshot = JSON.stringify({ settings: state.settings, quotes: state.quotes, stock: state.stock, waste: state.waste });
       const cloudSnapshot = JSON.stringify({
-        settings: migrateGlueDefault(Object.assign(structuredClone(DEFAULT_SETTINGS), cloud.settings || {})),
+        settings: applySettingsMigrations(Object.assign(structuredClone(DEFAULT_SETTINGS), cloud.settings || {})),
         quotes: cloud.quotes,
         stock: cloud.stock,
         waste: cloud.waste,
@@ -632,6 +648,14 @@
       line.name = material.name;
       line.unit = material.unit;
       if (!line.priceOverridden) line.unitPrice = material.unitPrice;
+    });
+    // Add a BOM line for any Settings material this quote doesn't have one
+    // for yet (e.g. an in-progress draft started before a new material -
+    // like framing stock - was added to the price list).
+    state.settings.materials.forEach(m => {
+      if (!quote.bom.some(line => line.materialId === m.id)) {
+        quote.bom.push({ materialId: m.id, name: m.name, unit: m.unit, unitPrice: m.unitPrice, qty: 0, priceOverridden: false });
+      }
     });
   }
 
@@ -943,6 +967,8 @@
       const lineTotal = (Number(line.qty) || 0) * (Number(line.unitPrice) || 0);
       const isCustom = !state.settings.materials.some(m => m.id === line.materialId);
       const isPalingLocked = line.materialId === 'paling' && lastCutListResult.palingsRequired > 0;
+      const isFramingLocked = line.materialId === 'framing' && lastFramingResult.palingsRequired > 0;
+      const isLocked = isPalingLocked || isFramingLocked;
       tr.innerHTML = `
         <td>${isCustom
           ? `<input class="name-input" type="text" data-idx="${idx}" data-field="name" value="${escapeAttr(line.name)}" />`
@@ -951,7 +977,7 @@
           ? `<input type="text" data-idx="${idx}" data-field="unit" value="${escapeAttr(line.unit)}" style="min-width:60px" />`
           : escapeHtml(line.unit)}</td>
         <td><input type="number" min="0" step="0.0001" data-idx="${idx}" data-field="unitPrice" value="${line.unitPrice}" /></td>
-        <td>${isPalingLocked
+        <td>${isLocked
           ? `<div class="qty-locked"><input type="number" value="${line.qty}" disabled /><span class="qty-locked-note">from cut list</span></div>`
           : `<input type="number" min="0" step="1" data-idx="${idx}" data-field="qty" value="${line.qty}" />`}</td>
         <td class="line-total" data-total-for="${idx}">${money(lineTotal)}</td>
@@ -1010,6 +1036,16 @@
     state.current.itemDescription = buildInvoiceDescription(template);
     renderCutListRows();
     refreshCutList();
+    // refreshCutList() only auto-fills a locked BOM qty when the fresh
+    // calculation is nonzero, so those fields stay editable for cut lists
+    // that don't use that stock type at all - but loading a whole new
+    // template can also mean going FROM a product that needed it (e.g.
+    // PKP-003's framing) TO one that doesn't, so any leftover locked value
+    // needs to be reset to zero too, not just left stale.
+    const palingLine = state.current.bom.find(l => l.materialId === 'paling');
+    if (palingLine) palingLine.qty = lastCutListResult.palingsRequired;
+    const framingLine = state.current.bom.find(l => l.materialId === 'framing');
+    if (framingLine) framingLine.qty = lastFramingResult.palingsRequired;
     if (!state.priceOverridden) state.current.sellingPriceOverride = null;
     renderBom();
     renderSummary();
@@ -1060,6 +1096,10 @@
     const palingLine = state.current.bom.find(l => l.materialId === 'paling');
     if (palingLine && lastCutListResult.palingsRequired > 0) {
       palingLine.qty = lastCutListResult.palingsRequired;
+    }
+    const framingLine = state.current.bom.find(l => l.materialId === 'framing');
+    if (framingLine && lastFramingResult.palingsRequired > 0) {
+      framingLine.qty = lastFramingResult.palingsRequired;
     }
   }
 
@@ -1684,7 +1724,7 @@
         const data = JSON.parse(reader.result);
         if (!data.quotes || !data.settings) throw new Error('Invalid backup file');
         if (!confirm('This will replace all current quotes and settings on this device. Continue?')) return;
-        state.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), data.settings);
+        state.settings = applySettingsMigrations(Object.assign(structuredClone(DEFAULT_SETTINGS), data.settings));
         state.quotes = data.quotes;
         state.stock = Array.isArray(data.stock) ? data.stock : [];
         state.waste = Array.isArray(data.waste) ? data.waste : [];

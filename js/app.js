@@ -1774,35 +1774,32 @@
     return checkStockAgainstCutList(paling, getPalingStockEntries());
   }
 
+  // A single "Palings to buy" line - the Shopping List is for what to put
+  // in the trolley, not a part-by-part breakdown (that's the Cut List's
+  // job). The underlying per-part stock matching still happens in
+  // getPalingCoverage(); it's just not rendered as individual rows here.
   function getPalingShoppingRows(cutListRows) {
-    const palingCheck = getPalingCoverage(cutListRows);
-    const rows = [];
-
-    palingCheck.perRow
-      .filter(r => r.qtyRequired > 0)
-      .forEach(r => {
-        const short = r.qtyRequired - r.qtyCovered;
-        if (short <= 0) {
-          rows.push({ name: r.name, qty: '', note: 'Covered by stock' });
-        } else if (r.qtyCovered > 0) {
-          rows.push({ name: r.name, qty: String(short), note: `Need to buy (${r.qtyCovered} of ${r.qtyRequired} covered by stock)` });
-        } else {
-          rows.push({ name: r.name, qty: String(short), note: 'Need to buy' });
-        }
-      });
-
-    const buyCount = palingCheck.shortfallPack.palingsRequired;
-    rows.push({
+    const buyCount = getPalingCoverage(cutListRows).shortfallPack.palingsRequired;
+    return [{
       name: 'Palings to buy',
       qty: String(buyCount),
       note: buyCount > 0 ? '' : 'Fully covered by current stock',
-    });
+    }];
+  }
 
-    return rows;
+  // Framing stock (K-series parts) isn't tracked in Stock, so this is just
+  // the raw bin-packed total - no "from stock" split to show.
+  function getFramingShoppingRows(cutListRows) {
+    const { framingResult } = packCutListByStockType(cutListRows);
+    if (framingResult.palingsRequired === 0) return [];
+    return [{ name: '70×35mm framing to buy', qty: String(framingResult.palingsRequired), note: '' }];
   }
 
   function getShoppingListRows(source) {
-    const rows = getPalingShoppingRows(source.cutListRows);
+    const rows = [
+      ...getPalingShoppingRows(source.cutListRows),
+      ...getFramingShoppingRows(source.cutListRows),
+    ];
 
     if (source.mode === 'quote') {
       source.quote.bom
@@ -1820,8 +1817,8 @@
       rows.push(...buildStockAwareRows('Castors', fromStock, buyNew));
     }
     rows.push(
-      { name: 'Screws', qty: '', note: '' },
-      { name: 'Brads', qty: '', note: '' },
+      { name: 'Screws', qty: '', note: 'Use workshop stock' },
+      { name: 'Brads', qty: '', note: 'Use workshop stock' },
       { name: 'Glue', qty: '', note: 'Use workshop stock first' },
       { name: 'Weed mat', qty: '', note: 'Use workshop stock first' },
       { name: 'Sandpaper', qty: '', note: 'Use workshop stock first' }

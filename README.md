@@ -16,8 +16,9 @@ static web app that runs entirely in the browser.
   framing stock and packed separately against 2400mm lengths instead of
   1800mm palings — shown as its own "X lengths of 2400mm 70×35mm framing
   required" line, never mixed into the palings figure. Currently used by
-  PKP-003 (Planter Bench). Framing stock isn't yet tracked in the Stock tab
-  or Shopping List — those still cover palings and simple materials only.
+  PKP-003 (Planter Bench). The Shopping List shows the same "framing to buy"
+  total, but framing stock isn't yet tracked in the Stock tab, so there's no
+  "from stock" split for it the way there is for palings.
 - **Bill of materials panel** — pick quantities against a per-unit price list
   (palings, castors, screws, brads, glue by default; add your own line items
   or custom one-off items per quote). In-progress quotes always track the
@@ -86,16 +87,19 @@ static web app that runs entirely in the browser.
   show what's covered and how many fresh palings you'd need to buy for the
   rest. A **Waste Log** tracks offcuts that ended up as scrap, with a
   running dollar total.
-- **Stock-aware Shopping List** — a Documents build pack's Shopping List
-  checks your current Stock so it only tells you what you actually need to
-  purchase. For palings, each cut list part is checked individually against
-  stock (same matching logic as "What Can I Build?") and tagged "Covered by
-  stock" or "Need to buy" — an offcut can fully cover a specific small part
-  without being treated as a whole paling, and only the still-uncovered
-  parts are re-packed into a single "Palings to buy" total. Castors, screws,
-  and any other material you've logged in Stock get a simpler "from stock" /
-  "buy new" split, since those are consumed one-for-one. If nothing's
-  in stock for an item, it just shows the full quantity needed, as before.
+- **Stock-aware Shopping List** — a simple materials-only list: what to put
+  in the trolley, not a part-by-part cutting breakdown (that's the Cut List
+  above it). For palings, every cut list part is still checked individually
+  against Stock behind the scenes (same matching logic as "What Can I
+  Build?" — an offcut can fully cover a specific small part without being
+  treated as a whole paling), but only the final total shows: a single
+  "Palings to buy" line, from the still-uncovered parts re-packed together.
+  Products with framing parts (see below) get their own "70×35mm framing to
+  buy" line the same way. Castors, screws, and any other material you've
+  logged in Stock get a simpler "from stock" / "buy new" split, since those
+  are consumed one-for-one; if nothing's in stock for an item, it just shows
+  the full quantity needed (or "Use workshop stock" for items with no
+  per-product quantity data, like screws/brads/glue on a template build).
 - **Works on mobile** — responsive layout, large touch targets, and a
   sticky tabbed header for quick access to Quote / Saved Quotes / Documents /
   Stock / Settings.

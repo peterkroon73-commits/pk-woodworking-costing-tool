@@ -2561,20 +2561,45 @@
   function renderFinancialSummary() {
     const s = computeFinancialSummary();
     const container = el('financialSummaryContent');
+    const netClass = s.netPosition >= 0 ? 'fin-positive' : 'fin-negative';
+    const remainingClass = s.remaining >= 0 ? 'fin-positive' : 'fin-negative';
     container.innerHTML = `
-      <dl class="summary-list">
-        <div><dt>Quote income (accepted quotes)</dt><dd>${money(s.quoteIncome)}</dd></div>
-        <div><dt>Manual income</dt><dd>${money(s.manualIncomeTotal)}</dd></div>
-        <div><dt>Total income</dt><dd>${money(s.totalIncome)}</dd></div>
-        <div><dt>Total expenses</dt><dd>-${money(s.totalExpenses)}</dd></div>
-        <div class="divider"></div>
-        <div><dt>Net position</dt><dd>${money(s.netPosition)}</dd></div>
-        <div><dt>Tax reserve (${TAX_RESERVE_PERCENT}% of net)</dt><dd>${money(s.taxReserve)}</dd></div>
-        <div><dt>Running costs / overheads (${RUNNING_COSTS_PERCENT}% of net)</dt><dd>${money(s.runningCosts)}</dd></div>
-        <div class="divider"></div>
-        <div><dt>Remaining after allocations</dt><dd>${money(s.remaining)}</dd></div>
-      </dl>
-      <p class="hint">Quote income only counts quotes marked "Accepted". Tax reserve and running costs are only allocated when the net position is positive.</p>
+      <div class="fin-dashboard">
+        <div class="fin-grid-2">
+          <div class="fin-card fin-income">
+            <h3>Income</h3>
+            <div class="fin-row"><span class="fin-label">Quote income (accepted)</span><span class="fin-amount">${money(s.quoteIncome)}</span></div>
+            <div class="fin-row"><span class="fin-label">Manual income</span><span class="fin-amount">${money(s.manualIncomeTotal)}</span></div>
+            <div class="fin-row fin-row-total"><span class="fin-label">Total income</span><span class="fin-amount fin-positive">${money(s.totalIncome)}</span></div>
+          </div>
+          <div class="fin-card fin-expenses">
+            <h3>Expenses</h3>
+            <div class="fin-row fin-row-total"><span class="fin-label">Total expenses</span><span class="fin-amount fin-negative">-${money(s.totalExpenses)}</span></div>
+          </div>
+        </div>
+
+        <div class="fin-net-strip">
+          <span class="fin-net-label">Net position (income − expenses)</span>
+          <span class="fin-amount ${netClass}">${money(s.netPosition)}</span>
+        </div>
+
+        <div class="fin-allocations-grid">
+          <div class="fin-allocation-box fin-allocation-tax">
+            <div class="fin-allocation-label">Tax Reserve (${TAX_RESERVE_PERCENT}%)</div>
+            <div class="fin-allocation-amount">${money(s.taxReserve)}</div>
+          </div>
+          <div class="fin-allocation-box fin-allocation-running">
+            <div class="fin-allocation-label">Running Costs / Overheads (${RUNNING_COSTS_PERCENT}%)</div>
+            <div class="fin-allocation-amount">${money(s.runningCosts)}</div>
+          </div>
+        </div>
+
+        <div class="fin-callout ${remainingClass}">
+          <div class="fin-callout-label">Remaining After Allocations</div>
+          <div class="fin-callout-amount">${money(s.remaining)}</div>
+          <div class="fin-callout-note">Quote income only counts quotes marked "Accepted". Tax reserve and running costs are only allocated when the net position is positive.</div>
+        </div>
+      </div>
     `;
   }
 

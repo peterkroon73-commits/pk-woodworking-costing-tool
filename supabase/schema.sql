@@ -63,6 +63,30 @@ create table if not exists waste_entries (
 create index if not exists waste_entries_user_id_idx on waste_entries(user_id);
 
 -- ---------------------------------------------------------------------
+-- manual_income: one row per Manual Income tab entry (external/cash
+-- payments or other non-quoted income).
+-- ---------------------------------------------------------------------
+create table if not exists manual_income (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+create index if not exists manual_income_user_id_idx on manual_income(user_id);
+
+-- ---------------------------------------------------------------------
+-- expenses: one row per Expenses & Receipts tab entry (material costs,
+-- hardware runs, timber purchases, etc.).
+-- ---------------------------------------------------------------------
+create table if not exists expenses (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+create index if not exists expenses_user_id_idx on expenses(user_id);
+
+-- ---------------------------------------------------------------------
 -- Row Level Security: every row is only visible/writable by the user
 -- that owns it. Since the app signs into one fixed account (the PIN IS
 -- the password for that account), this is what actually makes the PIN
@@ -73,6 +97,8 @@ alter table app_settings enable row level security;
 alter table quotes enable row level security;
 alter table stock_entries enable row level security;
 alter table waste_entries enable row level security;
+alter table manual_income enable row level security;
+alter table expenses enable row level security;
 
 drop policy if exists "app_settings_select_own" on app_settings;
 drop policy if exists "app_settings_insert_own" on app_settings;
@@ -109,3 +135,21 @@ create policy "waste_entries_select_own" on waste_entries for select using (auth
 create policy "waste_entries_insert_own" on waste_entries for insert with check (auth.uid() = user_id);
 create policy "waste_entries_update_own" on waste_entries for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "waste_entries_delete_own" on waste_entries for delete using (auth.uid() = user_id);
+
+drop policy if exists "manual_income_select_own" on manual_income;
+drop policy if exists "manual_income_insert_own" on manual_income;
+drop policy if exists "manual_income_update_own" on manual_income;
+drop policy if exists "manual_income_delete_own" on manual_income;
+create policy "manual_income_select_own" on manual_income for select using (auth.uid() = user_id);
+create policy "manual_income_insert_own" on manual_income for insert with check (auth.uid() = user_id);
+create policy "manual_income_update_own" on manual_income for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "manual_income_delete_own" on manual_income for delete using (auth.uid() = user_id);
+
+drop policy if exists "expenses_select_own" on expenses;
+drop policy if exists "expenses_insert_own" on expenses;
+drop policy if exists "expenses_update_own" on expenses;
+drop policy if exists "expenses_delete_own" on expenses;
+create policy "expenses_select_own" on expenses for select using (auth.uid() = user_id);
+create policy "expenses_insert_own" on expenses for insert with check (auth.uid() = user_id);
+create policy "expenses_update_own" on expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "expenses_delete_own" on expenses for delete using (auth.uid() = user_id);

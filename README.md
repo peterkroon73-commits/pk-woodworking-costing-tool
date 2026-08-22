@@ -105,9 +105,21 @@ static web app that runs entirely in the browser.
   are consumed one-for-one; if nothing's in stock for an item, it just shows
   the full quantity needed (or "Use workshop stock" for items with no
   per-product quantity data, like screws/brads/glue on a template build).
+- **Manual Income** — log external or cash payments and any other income
+  that didn't come through a quote (date, source/description, amount).
+- **Expenses & Receipts** — record material costs, hardware runs, timber
+  purchases, and any other business expense (date, description, category,
+  amount).
+- **Financial Summary** — a real-time overview of quote income (accepted
+  quotes only) plus manual income, minus logged expenses, with a dynamic
+  calculator that flags a Tax Reserve (22% of net position) and Running
+  Costs/Overheads (18% of net position) once the net position is positive.
+- **Header Lock button** — a "🔒 Lock" button in the header signs out of the
+  passcode session immediately from any tab (same as Settings → Sync →
+  Lock app).
 - **Works on mobile** — responsive layout, large touch targets, and a
   sticky tabbed header for quick access to Quote / Saved Quotes / Documents /
-  Stock / Settings.
+  Stock / Manual Income / Expenses & Receipts / Financial Summary / Settings.
 
 ## How data is stored
 
@@ -115,9 +127,9 @@ This is a static web app — no custom server, but it does use
 [Supabase](https://supabase.com) as a small cloud database so your data
 follows you across devices.
 
-- Settings, quotes, stock, and the waste log sync to your Supabase project
-  automatically every time you save something, and pull down fresh whenever
-  you open the app.
+- Settings, quotes, stock, the waste log, manual income, and expenses sync
+  to your Supabase project automatically every time you save something, and
+  pull down fresh whenever you open the app.
 - A copy is also kept in the browser's `localStorage` on each device, so the
   app still works (read-only-ish, until the connection comes back) if you
   briefly lose signal — changes made while offline sync as soon as you're
@@ -141,9 +153,12 @@ screen will work:
 
 1. **Create the database tables.** Open your project → **SQL Editor** → New
    query → paste the entire contents of `supabase/schema.sql` → **Run**.
-   This creates the `app_settings`, `quotes`, `stock_entries`, and
-   `waste_entries` tables and locks each row to your account via Row Level
-   Security. Safe to re-run if needed.
+   This creates the `app_settings`, `quotes`, `stock_entries`,
+   `waste_entries`, `manual_income`, and `expenses` tables and locks each
+   row to your account via Row Level Security. Safe to re-run if needed —
+   if you already ran this file before Manual Income/Expenses & Receipts
+   were added, just re-run the whole file again to pick up the two new
+   tables (it won't touch your existing data).
 2. **Turn off "Confirm email".** Open your project → **Authentication →
    Providers → Email** → turn off **Confirm email**. Since this is a
    single-user tool signing in with a passcode (not a real inbox-based

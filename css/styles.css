@@ -47,6 +47,15 @@ body {
   font-size: 0.85rem;
 }
 
+.header-lock-btn {
+  margin-left: auto;
+  color: var(--wood-light);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 0.3rem 0.2rem;
+  text-decoration: none;
+}
+
 .tabs {
   display: flex;
   gap: 0.25rem;

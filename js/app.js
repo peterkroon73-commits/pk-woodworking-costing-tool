@@ -7,6 +7,8 @@
     draft: 'pkw_draft_v1',
     stock: 'pkw_stock_v1',
     waste: 'pkw_waste_v1',
+    manualIncome: 'pkw_manual_income_v1',
+    expenses: 'pkw_expenses_v1',
   };
 
   const GLUE_PRICE_PER_ML = 0.0251; // $93 / 3700mL, rounded to 4dp
@@ -361,6 +363,36 @@
     pushWasteToCloud(waste);
   }
 
+  function loadManualIncome() {
+    try {
+      const raw = localStorage.getItem(STORAGE.manualIncome);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Failed to load manual income', e);
+      return [];
+    }
+  }
+
+  function saveManualIncome(manualIncome) {
+    localStorage.setItem(STORAGE.manualIncome, JSON.stringify(manualIncome));
+    pushManualIncomeToCloud(manualIncome);
+  }
+
+  function loadExpenses() {
+    try {
+      const raw = localStorage.getItem(STORAGE.expenses);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('Failed to load expenses', e);
+      return [];
+    }
+  }
+
+  function saveExpenses(expenses) {
+    localStorage.setItem(STORAGE.expenses, JSON.stringify(expenses));
+    pushExpensesToCloud(expenses);
+  }
+
   function saveDraft() {
     try {
       localStorage.setItem(STORAGE.draft, JSON.stringify(state.current));
@@ -487,36 +519,69 @@
     }
   }
 
+  async function pushManualIncomeToCloud(manualIncome) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      await syncArrayTable('manual_income', manualIncome, userId);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (manual income)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
+  async function pushExpensesToCloud(expenses) {
+    const userId = currentUserId;
+    if (!userId) return;
+    try {
+      await syncArrayTable('expenses', expenses, userId);
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed (expenses)', e);
+      setSyncStatus('Sync failed — saved on this device only. Check your connection.', true);
+    }
+  }
+
   async function pushAllToCloud() {
     await pushSettingsToCloud(state.settings);
     await pushQuotesToCloud(state.quotes);
     await pushStockToCloud(state.stock);
     await pushWasteToCloud(state.waste);
+    await pushManualIncomeToCloud(state.manualIncome);
+    await pushExpensesToCloud(state.expenses);
   }
 
   // Fetches everything currently in the cloud for this user. Returns null
   // fields/empty arrays if nothing's there yet (brand new account).
   async function fetchCloudSnapshot(userId) {
-    const [settingsRes, quotesRes, stockRes, wasteRes] = await Promise.all([
+    const [settingsRes, quotesRes, stockRes, wasteRes, incomeRes, expensesRes] = await Promise.all([
       sb.from('app_settings').select('data').eq('user_id', userId).maybeSingle(),
       sb.from('quotes').select('data').eq('user_id', userId),
       sb.from('stock_entries').select('data').eq('user_id', userId),
       sb.from('waste_entries').select('data').eq('user_id', userId),
+      sb.from('manual_income').select('data').eq('user_id', userId),
+      sb.from('expenses').select('data').eq('user_id', userId),
     ]);
     if (settingsRes.error) throw settingsRes.error;
     if (quotesRes.error) throw quotesRes.error;
     if (stockRes.error) throw stockRes.error;
     if (wasteRes.error) throw wasteRes.error;
+    if (incomeRes.error) throw incomeRes.error;
+    if (expensesRes.error) throw expensesRes.error;
     return {
       settings: settingsRes.data ? settingsRes.data.data : null,
       quotes: (quotesRes.data || []).map(r => r.data),
       stock: (stockRes.data || []).map(r => r.data),
       waste: (wasteRes.data || []).map(r => r.data),
+      manualIncome: (incomeRes.data || []).map(r => r.data),
+      expenses: (expensesRes.data || []).map(r => r.data),
     };
   }
 
   function cloudSnapshotIsEmpty(snapshot) {
-    return !snapshot.settings && snapshot.quotes.length === 0 && snapshot.stock.length === 0 && snapshot.waste.length === 0;
+    return !snapshot.settings && snapshot.quotes.length === 0 && snapshot.stock.length === 0 &&
+      snapshot.waste.length === 0 && snapshot.manualIncome.length === 0 && snapshot.expenses.length === 0;
   }
 
   function applyCloudSnapshot(snapshot) {
@@ -524,11 +589,15 @@
     state.quotes = snapshot.quotes;
     state.stock = snapshot.stock;
     state.waste = snapshot.waste;
+    state.manualIncome = snapshot.manualIncome;
+    state.expenses = snapshot.expenses;
     materialsDraft = structuredClone(state.settings.materials);
     localStorage.setItem(STORAGE.settings, JSON.stringify(state.settings));
     localStorage.setItem(STORAGE.quotes, JSON.stringify(state.quotes));
     localStorage.setItem(STORAGE.stock, JSON.stringify(state.stock));
     localStorage.setItem(STORAGE.waste, JSON.stringify(state.waste));
+    localStorage.setItem(STORAGE.manualIncome, JSON.stringify(state.manualIncome));
+    localStorage.setItem(STORAGE.expenses, JSON.stringify(state.expenses));
   }
 
   function rerenderEverything() {
@@ -537,8 +606,13 @@
     renderQuoteForm();
     renderStockTable();
     renderWasteTable();
+    renderIncomeTable();
+    renderExpenseTable();
     if (document.getElementById('tab-documents').classList.contains('active')) {
       renderDocumentsPreview();
+    }
+    if (document.getElementById('tab-financialSummary').classList.contains('active')) {
+      renderFinancialSummary();
     }
   }
 
@@ -561,12 +635,17 @@
         return;
       }
 
-      const localSnapshot = JSON.stringify({ settings: state.settings, quotes: state.quotes, stock: state.stock, waste: state.waste });
+      const localSnapshot = JSON.stringify({
+        settings: state.settings, quotes: state.quotes, stock: state.stock, waste: state.waste,
+        manualIncome: state.manualIncome, expenses: state.expenses,
+      });
       const cloudSnapshot = JSON.stringify({
         settings: applySettingsMigrations(Object.assign(structuredClone(DEFAULT_SETTINGS), cloud.settings || {})),
         quotes: cloud.quotes,
         stock: cloud.stock,
         waste: cloud.waste,
+        manualIncome: cloud.manualIncome,
+        expenses: cloud.expenses,
       });
 
       if (localSnapshot === cloudSnapshot) {
@@ -621,6 +700,8 @@
     quotes: loadQuotes(),
     stock: loadStock(),
     waste: loadWaste(),
+    manualIncome: loadManualIncome(),
+    expenses: loadExpenses(),
     current: null,       // quote currently being edited
     priceOverridden: false, // has user manually edited selling price for this quote?
   };
@@ -1702,6 +1783,8 @@
       quotes: state.quotes,
       stock: state.stock,
       waste: state.waste,
+      manualIncome: state.manualIncome,
+      expenses: state.expenses,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1728,17 +1811,23 @@
         state.quotes = data.quotes;
         state.stock = Array.isArray(data.stock) ? data.stock : [];
         state.waste = Array.isArray(data.waste) ? data.waste : [];
+        state.manualIncome = Array.isArray(data.manualIncome) ? data.manualIncome : [];
+        state.expenses = Array.isArray(data.expenses) ? data.expenses : [];
         materialsDraft = structuredClone(state.settings.materials);
         saveSettings(state.settings);
         saveQuotes(state.quotes);
         saveStock(state.stock);
         saveWaste(state.waste);
+        saveManualIncome(state.manualIncome);
+        saveExpenses(state.expenses);
         renderSettingsForm();
         renderSavedList();
         renderBom();
         renderSummary();
         renderStockTable();
         renderWasteTable();
+        renderIncomeTable();
+        renderExpenseTable();
         alert('Backup imported successfully.');
       } catch (err) {
         alert('Could not import file: ' + err.message);
@@ -2353,6 +2442,143 @@
   }
 
   // ---------------------------------------------------------------------
+  // Manual Income
+  // ---------------------------------------------------------------------
+
+  function renderIncomeTable() {
+    const tbody = el('incomeBody');
+    tbody.innerHTML = '';
+    state.manualIncome.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${formatDateLong(entry.date)}</td>
+        <td>${escapeHtml(entry.source || '')}</td>
+        <td>${money(Number(entry.amount) || 0)}</td>
+        <td><button type="button" class="icon-btn" data-remove-income="${idx}" title="Remove entry">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    const container = el('incomeSummary');
+    if (state.manualIncome.length === 0) {
+      container.innerHTML = '<p class="hint">No manual income logged yet.</p>';
+      return;
+    }
+    const total = state.manualIncome.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    container.innerHTML = `<div class="cutlist-summary">Total manual income: <strong>${money(total)}</strong></div>`;
+  }
+
+  function bindManualIncomeEvents() {
+    el('btnAddIncome').addEventListener('click', () => {
+      const amount = Number(el('incomeAmount').value) || 0;
+      const source = el('incomeSource').value.trim();
+      if (amount <= 0) return;
+      state.manualIncome.push({ id: uid(), date: el('incomeDate').value || todayISO(), source, amount });
+      saveManualIncome(state.manualIncome);
+      renderIncomeTable();
+      el('incomeSource').value = '';
+      el('incomeAmount').value = '';
+    });
+
+    el('incomeBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeIncome;
+      if (idx === undefined) return;
+      state.manualIncome.splice(Number(idx), 1);
+      saveManualIncome(state.manualIncome);
+      renderIncomeTable();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Expenses & Receipts
+  // ---------------------------------------------------------------------
+
+  function renderExpenseTable() {
+    const tbody = el('expenseBody');
+    tbody.innerHTML = '';
+    state.expenses.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${formatDateLong(entry.date)}</td>
+        <td>${escapeHtml(entry.description || '')}</td>
+        <td>${escapeHtml(entry.category || '')}</td>
+        <td>${money(Number(entry.amount) || 0)}</td>
+        <td><button type="button" class="icon-btn" data-remove-expense="${idx}" title="Remove entry">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    const container = el('expenseSummary');
+    if (state.expenses.length === 0) {
+      container.innerHTML = '<p class="hint">No expenses logged yet.</p>';
+      return;
+    }
+    const total = state.expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    container.innerHTML = `<div class="cutlist-summary">Total expenses: <strong>${money(total)}</strong></div>`;
+  }
+
+  function bindExpensesEvents() {
+    el('btnAddExpense').addEventListener('click', () => {
+      const amount = Number(el('expenseAmount').value) || 0;
+      const description = el('expenseDescription').value.trim();
+      const category = el('expenseCategory').value;
+      if (amount <= 0) return;
+      state.expenses.push({ id: uid(), date: el('expenseDate').value || todayISO(), description, category, amount });
+      saveExpenses(state.expenses);
+      renderExpenseTable();
+      el('expenseDescription').value = '';
+      el('expenseAmount').value = '';
+    });
+
+    el('expenseBody').addEventListener('click', e => {
+      const idx = e.target.dataset.removeExpense;
+      if (idx === undefined) return;
+      state.expenses.splice(Number(idx), 1);
+      saveExpenses(state.expenses);
+      renderExpenseTable();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Financial Summary
+  // ---------------------------------------------------------------------
+
+  const TAX_RESERVE_PERCENT = 22;
+  const RUNNING_COSTS_PERCENT = 18;
+
+  function computeFinancialSummary() {
+    const quoteIncome = state.quotes
+      .filter(q => q.status === 'Accepted')
+      .reduce((sum, q) => sum + computeTotals(q).sellingPrice, 0);
+    const manualIncomeTotal = state.manualIncome.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const totalIncome = quoteIncome + manualIncomeTotal;
+    const totalExpenses = state.expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const netPosition = totalIncome - totalExpenses;
+    const taxReserve = netPosition > 0 ? netPosition * (TAX_RESERVE_PERCENT / 100) : 0;
+    const runningCosts = netPosition > 0 ? netPosition * (RUNNING_COSTS_PERCENT / 100) : 0;
+    const remaining = netPosition - taxReserve - runningCosts;
+    return { quoteIncome, manualIncomeTotal, totalIncome, totalExpenses, netPosition, taxReserve, runningCosts, remaining };
+  }
+
+  function renderFinancialSummary() {
+    const s = computeFinancialSummary();
+    const container = el('financialSummaryContent');
+    container.innerHTML = `
+      <dl class="summary-list">
+        <div><dt>Quote income (accepted quotes)</dt><dd>${money(s.quoteIncome)}</dd></div>
+        <div><dt>Manual income</dt><dd>${money(s.manualIncomeTotal)}</dd></div>
+        <div><dt>Total income</dt><dd>${money(s.totalIncome)}</dd></div>
+        <div><dt>Total expenses</dt><dd>-${money(s.totalExpenses)}</dd></div>
+        <div class="divider"></div>
+        <div><dt>Net position</dt><dd>${money(s.netPosition)}</dd></div>
+        <div><dt>Tax reserve (${TAX_RESERVE_PERCENT}% of net)</dt><dd>${money(s.taxReserve)}</dd></div>
+        <div><dt>Running costs / overheads (${RUNNING_COSTS_PERCENT}% of net)</dt><dd>${money(s.runningCosts)}</dd></div>
+        <div class="divider"></div>
+        <div><dt>Remaining after allocations</dt><dd>${money(s.remaining)}</dd></div>
+      </dl>
+      <p class="hint">Quote income only counts quotes marked "Accepted". Tax reserve and running costs are only allocated when the net position is positive.</p>
+    `;
+  }
+
+  // ---------------------------------------------------------------------
   // Tabs
   // ---------------------------------------------------------------------
 
@@ -2368,6 +2594,9 @@
     if (name === 'documents') {
       populateAcceptedQuoteSelect();
       renderDocumentsPreview();
+    }
+    if (name === 'financialSummary') {
+      renderFinancialSummary();
     }
   }
 
@@ -2392,6 +2621,9 @@
     bindSettingsEvents();
     bindDocumentsEvents();
     bindStockEvents();
+    bindManualIncomeEvents();
+    bindExpensesEvents();
+    el('btnHeaderLock').addEventListener('click', lockApp);
 
     populatePartNameOptions();
     populateTemplateSelect('cutListTemplate');
@@ -2400,11 +2632,15 @@
     populateAcceptedQuoteSelect();
     populateStockMaterialSelect();
     el('stockDate').value = todayISO();
+    el('incomeDate').value = todayISO();
+    el('expenseDate').value = todayISO();
     renderQuoteForm();
     renderSavedList();
     renderSettingsForm();
     renderStockTable();
     renderWasteTable();
+    renderIncomeTable();
+    renderExpenseTable();
   }
 
   // ---------------------------------------------------------------------

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#3c2a1e" />
 <title>PK Woodworking — Quote &amp; Costing Tool</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='16' fill='%233c2a1e'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23c8a578' font-family='Georgia,serif'%3EW%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="css/styles.css?v=23" />
+<link rel="stylesheet" href="css/styles.css?v=24" />
 </head>
 <body>
 
@@ -49,12 +49,16 @@
   <div class="header-row">
     <h1>PK Woodworking</h1>
     <span class="subtitle">Quote &amp; Costing Tool</span>
+    <button type="button" id="btnHeaderLock" class="btn-link header-lock-btn" title="Lock the app">🔒 Lock</button>
   </div>
   <nav class="tabs" role="tablist">
     <button type="button" class="tab-btn active" data-tab="quote" role="tab" aria-selected="true">Quote</button>
     <button type="button" class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved Quotes</button>
     <button type="button" class="tab-btn" data-tab="documents" role="tab" aria-selected="false">Documents</button>
     <button type="button" class="tab-btn" data-tab="stock" role="tab" aria-selected="false">Stock</button>
+    <button type="button" class="tab-btn" data-tab="manualIncome" role="tab" aria-selected="false">Manual Income</button>
+    <button type="button" class="tab-btn" data-tab="expenses" role="tab" aria-selected="false">Expenses &amp; Receipts</button>
+    <button type="button" class="tab-btn" data-tab="financialSummary" role="tab" aria-selected="false">Financial Summary</button>
     <button type="button" class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
   </nav>
 </header>
@@ -341,6 +345,96 @@
 
   </section>
 
+  <!-- ===================== MANUAL INCOME TAB ===================== -->
+  <section id="tab-manualIncome" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Log Manual Income</h2>
+      <p class="hint">External or cash payments, or any other income that didn't come through a quote.</p>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="incomeDate">Date</label>
+          <input type="date" id="incomeDate" />
+        </div>
+        <div class="field">
+          <label for="incomeSource">Source / description</label>
+          <input type="text" id="incomeSource" placeholder="e.g. Cash job — fence repair" />
+        </div>
+        <div class="field">
+          <label for="incomeAmount">Amount ($)</label>
+          <input type="number" id="incomeAmount" min="0" step="0.01" />
+        </div>
+      </div>
+      <button type="button" id="btnAddIncome" class="btn btn-primary">+ Log Income</button>
+    </div>
+
+    <div class="card">
+      <h2>Manual Income Entries</h2>
+      <div class="table-scroll">
+        <table id="incomeTable" class="bom-table">
+          <thead>
+            <tr><th>Date</th><th>Source / description</th><th>Amount</th><th></th></tr>
+          </thead>
+          <tbody id="incomeBody"></tbody>
+        </table>
+      </div>
+      <div id="incomeSummary" class="cutlist-result"></div>
+    </div>
+  </section>
+
+  <!-- ===================== EXPENSES & RECEIPTS TAB ===================== -->
+  <section id="tab-expenses" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Log an Expense</h2>
+      <p class="hint">Material costs, hardware runs, timber purchases, and any other business expense.</p>
+      <div class="quote-meta">
+        <div class="field">
+          <label for="expenseDate">Date</label>
+          <input type="date" id="expenseDate" />
+        </div>
+        <div class="field">
+          <label for="expenseDescription">Description</label>
+          <input type="text" id="expenseDescription" placeholder="e.g. Bunnings — screws &amp; brackets" />
+        </div>
+        <div class="field">
+          <label for="expenseCategory">Category</label>
+          <select id="expenseCategory">
+            <option value="Materials">Materials</option>
+            <option value="Hardware">Hardware</option>
+            <option value="Timber">Timber</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="expenseAmount">Amount ($)</label>
+          <input type="number" id="expenseAmount" min="0" step="0.01" />
+        </div>
+      </div>
+      <button type="button" id="btnAddExpense" class="btn btn-primary">+ Log Expense</button>
+    </div>
+
+    <div class="card">
+      <h2>Expense Entries</h2>
+      <div class="table-scroll">
+        <table id="expenseTable" class="bom-table">
+          <thead>
+            <tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th></th></tr>
+          </thead>
+          <tbody id="expenseBody"></tbody>
+        </table>
+      </div>
+      <div id="expenseSummary" class="cutlist-result"></div>
+    </div>
+  </section>
+
+  <!-- ===================== FINANCIAL SUMMARY TAB ===================== -->
+  <section id="tab-financialSummary" class="tab-panel" role="tabpanel">
+    <div class="card">
+      <h2>Financial Summary</h2>
+      <p class="hint">Updates automatically from your accepted quotes, manual income, and logged expenses.</p>
+      <div id="financialSummaryContent"></div>
+    </div>
+  </section>
+
   <!-- ===================== SETTINGS TAB ===================== -->
   <section id="tab-settings" class="tab-panel" role="tabpanel">
     <div class="card">
@@ -424,6 +518,6 @@
 <div id="print-document" class="print-only"></div>
 
 <script src="js/vendor/supabase.js?v=2.112.3"></script>
-<script src="js/app.js?v=23"></script>
+<script src="js/app.js?v=24"></script>
 </body>
 </html>

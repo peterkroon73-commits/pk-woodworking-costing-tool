@@ -730,6 +730,85 @@ input[readonly] {
   line-height: 1.4;
 }
 
+.fin-payg-section {
+  margin-top: 0.25rem;
+}
+
+.fin-payg-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--wood-dark);
+}
+
+.fin-payg-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .fin-payg-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.fin-payg-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(60, 42, 30, 0.06);
+  text-align: center;
+}
+
+.fin-payg-icon {
+  display: block;
+  font-size: 1.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.fin-payg-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.fin-payg-amount {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-top: 0.4rem;
+}
+
+.fin-payg-subtitle {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.55rem;
+  line-height: 1.4;
+}
+
+.fin-payg-card.fin-payg-gross {
+  background: #fdf3e7;
+  border-color: #eecfa0;
+  border-top: 3px solid #c8792e;
+}
+.fin-payg-card.fin-payg-gross .fin-payg-label { color: #a85d1f; }
+.fin-payg-card.fin-payg-gross .fin-payg-amount { color: #8a4a15; }
+
+.fin-payg-card.fin-payg-net {
+  background: #fdeceb;
+  border-color: #f3c3bd;
+  border-top: 3px solid var(--danger);
+}
+.fin-payg-card.fin-payg-net .fin-payg-label { color: #a4372a; }
+.fin-payg-card.fin-payg-net .fin-payg-amount { color: #8a2c1f; }
+
+.fin-payg-card.fin-payg-buffer {
+  background: #eaf7ee;
+  border-color: #bfe3cc;
+  border-top: 3px solid var(--accent);
+}
+.fin-payg-card.fin-payg-buffer .fin-payg-label { color: var(--accent); }
+.fin-payg-card.fin-payg-buffer .fin-payg-amount { color: #1a6b3f; }
+
 /* ----------------------------------------------------------------- */
 /* Lock screen                                                       */
 /* ----------------------------------------------------------------- */

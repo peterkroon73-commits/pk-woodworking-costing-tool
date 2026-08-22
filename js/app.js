@@ -2563,6 +2563,13 @@
     const container = el('financialSummaryContent');
     const netClass = s.netPosition >= 0 ? 'fin-positive' : 'fin-negative';
     const remainingClass = s.remaining >= 0 ? 'fin-positive' : 'fin-negative';
+
+    // PAYG / BAS tax tracking — display-only figures derived from the
+    // totals above; doesn't feed back into computeFinancialSummary().
+    const paygGrossTax = s.totalIncome * (TAX_RESERVE_PERCENT / 100);
+    const trueNetTax = s.netPosition > 0 ? s.netPosition * (TAX_RESERVE_PERCENT / 100) : 0;
+    const taxBuffer = paygGrossTax - trueNetTax;
+
     container.innerHTML = `
       <div class="fin-dashboard">
         <div class="fin-grid-2">
@@ -2598,6 +2605,28 @@
           <div class="fin-callout-label">Remaining After Allocations</div>
           <div class="fin-callout-amount">${money(s.remaining)}</div>
           <div class="fin-callout-note">Quote income only counts quotes marked "Accepted". Tax reserve and running costs are only allocated when the net position is positive.</div>
+        </div>
+
+        <div class="fin-payg-section">
+          <h3 class="fin-payg-title">PAYG / BAS Tax Tracking</h3>
+          <div class="fin-payg-grid">
+            <div class="fin-payg-card fin-payg-gross">
+              <div class="fin-payg-label">PAYG Gross BAS Tax (${TAX_RESERVE_PERCENT}%)</div>
+              <div class="fin-payg-amount">${money(paygGrossTax)}</div>
+              <div class="fin-payg-subtitle">${TAX_RESERVE_PERCENT}% of total gross income (quote income + manual income), before expenses — what myGov will ask for on your BAS.</div>
+            </div>
+            <div class="fin-payg-card fin-payg-net">
+              <div class="fin-payg-label">True Net Income Tax (${TAX_RESERVE_PERCENT}%)</div>
+              <div class="fin-payg-amount">${money(trueNetTax)}</div>
+              <div class="fin-payg-subtitle">${TAX_RESERVE_PERCENT}% of income after expenses are subtracted.</div>
+            </div>
+            <div class="fin-payg-card fin-payg-buffer">
+              <span class="fin-payg-icon">🪙</span>
+              <div class="fin-payg-label">Tax Buffer / Year-End Refund</div>
+              <div class="fin-payg-amount">${money(taxBuffer)}</div>
+              <div class="fin-payg-subtitle">Extra savings returned to you at tax time via your expense deductions</div>
+            </div>
+          </div>
         </div>
       </div>
     `;
